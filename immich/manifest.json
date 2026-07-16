@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "appId": "immich",
+  "releases": [
+    {
+      "version": "1.107.2",
+      "requiredStop": true
+    }
+  ]
+}
