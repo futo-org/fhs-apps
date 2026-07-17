@@ -6,7 +6,7 @@
       "name": "Immich",
       "tagline": "Self-hosted photo and video management",
       "description": "High-performance photo and video backup solution with mobile apps, machine-learning search, and multi-user libraries.",
-      "icon": "immich/icon.png",
+      "icon": "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/design/immich-logo.png",
       "developer": "FUTO",
       "website": "https://immich.app",
       "sourceRepo": "https://github.com/immich-app/immich"

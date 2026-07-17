@@ -12,6 +12,7 @@ x-environment: &env
   DB_USERNAME: &db_username "postgres"
   DB_PASSWORD: &db_password "postgres"
   DB_DATABASE_NAME: &db_database_name "immich"
+  IMMICH_VERSION: "v1.107.2"
 
 services:
   immich-server:
