@@ -22,7 +22,7 @@ services:
     #   file: hwaccel.transcoding.yml
     #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
     volumes:
-      - ${UPLOAD_LOCATION}:/usr/src/app/upload
+      - ${APP_DATA_DIR}/library:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
     environment:
       <<: *env
@@ -66,7 +66,7 @@ services:
       POSTGRES_DB: *db_database_name
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
-      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+      - ${APP_DATA_DIR}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: pg_isready --dbname='${DB_DATABASE_NAME}' --username='${DB_USERNAME}' || exit 1; Chksum="$$(psql --dbname='${DB_DATABASE_NAME}' --username='${DB_USERNAME}' --tuples-only --no-align --command='SELECT COALESCE(SUM(checksum_failures), 0) FROM pg_stat_database')"; echo "checksum failure count is $$Chksum"; [ "$$Chksum" = '0' ] || exit 1
       interval: 5m
