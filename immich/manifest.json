@@ -7,5 +7,5 @@
       "requiredStop": true
     }
   ],
-  "health_check_url": "/api/ping"
+  "health_check_url": "/api/server/ping"
 }
