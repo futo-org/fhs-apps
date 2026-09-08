@@ -7,5 +7,6 @@
       "requiredStop": true
     }
   ],
-  "health_check_url": "/api/server/ping"
+  "health_check_url": "/api/server/ping",
+  "app_port": 2283
 }
