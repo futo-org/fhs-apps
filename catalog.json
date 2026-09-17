@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "apps": [
+    {
+      "id": "immich",
+      "name": "Immich",
+      "tagline": "Self-hosted photo and video management",
+      "description": "High-performance photo and video backup solution with mobile apps, machine-learning search, and multi-user libraries.",
+      "icon": "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/design/immich-logo.png",
+      "developer": "FUTO",
+      "website": "https://immich.app",
+      "sourceRepo": "https://github.com/immich-app/immich"
+    },
+    {
+      "id": "fhs-enhance-media",
+      "name": "Enhance Media",
+      "tagline": "Add media streaming capability to your FUTO Home",
+      "description": "A streaming experience for your FUTO Home. Enhance Media allows you to stream your media files to any device on your network.",
+      "icon": "enhance-media/icon.png",
+      "developer": "FUTO",
+      "sourceRepo": "https://github.com/<org>/enhance-media"
+    }
+  ]
+}
