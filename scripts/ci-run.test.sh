@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Tests for the ci-run.sh health gate, on a fake clock.
+set -euo pipefail
+
+# shellcheck source=testing.sh
+source "$(dirname "$0")/testing.sh"
+# shellcheck source=ci-run.sh
+source "$(dirname "$0")/ci-run.sh"
+
+# Fakes: sleeping advances the clock; restarts come from the case; logs print nothing.
+# Not named restarts: wait_healthy has a local of that name, which bash would show the fake.
+now=0
+sleeps=()
+fake_restarts=0
+sleep() {
+  sleeps+=("$1")
+  now=$((now + $1))
+}
+date() { echo "$now"; }
+max_restarts() { echo "$fake_restarts"; }
+docker() { :; }
+
+# gate <check that passes, 0 = never> [restarts] [timeout s]: runs wait_healthy on a fresh
+# clock against a health check that counts its runs; sets status, output and checks.
+gate() {
+  local dir
+  now=0 sleeps=() fake_restarts=${2:-0} health_timeout=${3:-1800}
+  dir=$(mktemp -d "$test_root/gate.XXXXXX")
+  echo "$1" > "$dir/pass_at"
+  cat > "$dir/health-check.sh" << 'EOF'
+echo check >> checks
+pass_at=$(< pass_at)
+((pass_at > 0 && $(wc -l < checks) >= pass_at))
+EOF
+  status=0
+  wait_healthy "$dir" > "$dir/output" 2>&1 || status=$?
+  output=$(tail -1 "$dir/output")
+  checks=$(wc -l < "$dir/checks")
+}
+
+gate 3
+assert_equal "is healthy as soon as the check passes, checking every interval" \
+  "$status $checks ${sleeps[*]} | $output" "0 3 5 5 | healthy after 10 s"
+
+gate 0 5
+assert_equal "fails without waiting for the timeout once a service restarted 5 times" \
+  "$status $checks ${sleeps[*]} | $output" "1 1  | a service restarted 5 times"
+
+gate 0 0 30
+assert_equal "fails when the app is still unhealthy at the timeout" \
+  "$status $checks | $output" "1 7 | not healthy after 30 s"
+
+finish_tests

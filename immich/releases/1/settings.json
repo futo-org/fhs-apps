@@ -1,0 +1,81 @@
+{
+  "fields": [
+    {
+      "key": "UPLOAD_LOCATION",
+      "type": "path",
+      "label": "Photo storage",
+      "help": "Where Immich stores uploads. Leave empty to keep them in app data.",
+      "editable": false,
+      "compose": {
+        "services": {
+          "immich-server": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${UPLOAD_LOCATION}",
+                "target": "/usr/src/app/upload",
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "EXTERNAL_LIBRARY",
+      "type": "path",
+      "label": "External library",
+      "help": "An existing photo folder Immich indexes without changing it. Add /mnt/external-library as an external library in Immich.",
+      "compose": {
+        "services": {
+          "immich-server": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${EXTERNAL_LIBRARY}",
+                "target": "/mnt/external-library",
+                "read_only": true,
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "TRANSCODE_ACCEL",
+      "type": "enum",
+      "label": "Hardware video transcoding",
+      "default": "none",
+      "options": [
+        { "value": "none", "label": "Off" },
+        { "value": "quicksync", "label": "Intel Quick Sync" },
+        { "value": "vaapi", "label": "VA-API" },
+        { "value": "nvenc", "label": "NVIDIA NVENC" }
+      ],
+      "compose": {
+        "quicksync": {
+          "services": { "immich-server": { "devices": ["/dev/dri:/dev/dri"] } }
+        },
+        "vaapi": {
+          "services": { "immich-server": { "devices": ["/dev/dri:/dev/dri"] } }
+        },
+        "nvenc": {
+          "services": {
+            "immich-server": {
+              "deploy": {
+                "resources": {
+                  "reservations": {
+                    "devices": [
+                      { "driver": "nvidia", "count": 1, "capabilities": ["gpu", "compute", "video"] }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

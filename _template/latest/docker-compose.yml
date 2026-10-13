@@ -1,0 +1,13 @@
+# Stock compose of the release, kept close to upstream's. The device renders it
+# with the settings' fragments; values come from the environment:
+#   APP_ID, APP_DATA_DIR, APP_SEED, APP_PASSWORD, and every setting key.
+name: APP_ID
+
+services:
+  app:
+    image: example/app:1.0.0
+    volumes:
+      - ${APP_DATA_DIR}/config:/config
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
