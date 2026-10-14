@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "appId": "vaultwarden",
+  "appPort": 8222,
+  "releases": []
+}

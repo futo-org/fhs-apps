@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "appId": "homeassistant",
+  "appPort": 8123,
+  "releases": []
+}

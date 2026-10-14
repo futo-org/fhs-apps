@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "appId": "nextcloud",
+  "appPort": 8081,
+  "releases": [
+    {
+      "version": 1,
+      "appVersion": "v32.0.15",
+      "canSkip": false
+    },
+    {
+      "version": 2,
+      "appVersion": "v33.0.9",
+      "canSkip": false
+    }
+  ]
+}

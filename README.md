@@ -13,7 +13,7 @@ catalog.json              # apps shown in the store (name, tagline, icon, ...)
     docker-compose.yml    # stock compose, close to upstream's
     settings.json         # deployment choices and the compose changes they make
     health-check.sh       # exit 0 = serving
-    data/                 # seed folders copied into the app's data on install
+    data/                 # seed folders copied into the app's data on install (.gitkeep dropped)
   releases/<n>/           # frozen copy of latest/ made by CI; never edited
 _template/                # starting point for a new app
 scripts/                  # bash tooling, run with `mise run <task>`
@@ -57,9 +57,10 @@ filling the system disk.
 
 ## Compose and health check
 
-* Values reach the compose as `${KEY}`, plus platform values `APP_ID`, `APP_DATA_DIR`,
-  `APP_SEED`, `APP_PASSWORD`. Data lives under `${APP_DATA_DIR}`; named volumes,
-  `env_file`, floating tags and SELinux `:z`/`:Z` are rejected.
+* Values reach the compose as `${KEY}` (a bool as `true` or `false`, an unset folder as
+  empty), plus platform values `APP_ID`, `APP_DATA_DIR`, `APP_SEED`, `APP_PASSWORD`. Data
+  lives under `${APP_DATA_DIR}`; named volumes, `env_file`, floating tags and SELinux
+  `:z`/`:Z` are rejected.
 * Every service sets `restart: always` or `restart: unless-stopped`.
 * `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run.
   Available tools: bash, coreutils, grep, sed, gawk, jq, curl, docker compose.

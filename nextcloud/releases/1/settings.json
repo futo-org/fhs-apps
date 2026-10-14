@@ -1,0 +1,34 @@
+{
+  "fields": [
+    {
+      "key": "EXTERNAL_FOLDER",
+      "type": "path",
+      "label": "External folder",
+      "help": "A folder Nextcloud can show beside its own files. Enable the External storage app in Nextcloud and add a Local storage at /mnt/external.",
+      "compose": {
+        "services": {
+          "app": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${EXTERNAL_FOLDER}",
+                "target": "/mnt/external",
+                "bind": { "create_host_path": false }
+              }
+            ]
+          },
+          "cron": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${EXTERNAL_FOLDER}",
+                "target": "/mnt/external",
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -62,7 +62,7 @@ while IFS= read -r field; do
   key=$(jq -r .key <<< "$field")
   case $(jq -r .type <<< "$field") in
     generated) env_args+=("$key=$(generated_secret "$key")") ;;
-    *) env_args+=("$key=$(jq -r '.value // ""' <<< "$field")") ;;
+    *) env_args+=("$key=$(jq -r 'if .value == null then "" else .value | tostring end' <<< "$field")") ;;
   esac
 
   if jq -e '.fragment != null' <<< "$field" > /dev/null; then

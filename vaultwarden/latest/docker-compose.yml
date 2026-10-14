@@ -1,0 +1,16 @@
+name: vaultwarden
+
+services:
+  vaultwarden:
+    container_name: vaultwarden
+    image: docker.io/vaultwarden/server:1.37.4
+    environment:
+      # DOMAIN is left unset: the platform has no variable for the device's URL.
+      # Vaultwarden then guesses links from request headers; WebAuthn needs it.
+      # ADMIN_TOKEN is left unset, so the /admin page stays off.
+      SIGNUPS_ALLOWED: "true"
+    volumes:
+      - ${APP_DATA_DIR}/vw-data:/data
+    ports:
+      - "8222:80"
+    restart: always

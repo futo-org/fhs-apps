@@ -71,6 +71,7 @@ services:
       - ${APP_DATA_DIR}/config:/config
     environment:
       SECRET: ${SECRET}
+      VERBOSE: ${VERBOSE}
     ports:
       - "8080:80"
     restart: unless-stopped

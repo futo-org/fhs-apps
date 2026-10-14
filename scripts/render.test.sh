@@ -28,6 +28,9 @@ assert_equal "chosen enum option applies its fragment" \
 assert_equal "false beats a true default" \
   "$(rendered_service '{"VERBOSE": false}' | jq -r .environment.WHOAMI_VERBOSE)" no
 
+assert_equal "a bool reaches the compose as true or false" \
+  "$(rendered_service '{"VERBOSE": false}' | jq -r .environment.VERBOSE) $(jq -r .environment.VERBOSE <<< "$service")" "false true"
+
 assert_equal "picked path replaces the stock bind at the same target" \
   "$(rendered_service '{"EXPORT_DIR": "/var/mnt/external/abc/Export"}' | jq -c '[.volumes[] | {source, target, create_host_path: .bind.create_host_path}]')" \
   '[{"source":"/var/mnt/external/abc/Export","target":"/config","create_host_path":false}]'

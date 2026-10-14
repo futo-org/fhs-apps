@@ -50,4 +50,11 @@ gate 0 0 30
 assert_equal "fails when the app is still unhealthy at the timeout" \
   "$status $checks | $output" "1 7 | not healthy after 30 s"
 
+seed=$(mktemp -d "$test_root/seed.XXXXXX")
+mkdir -p "$seed/release/data/postgres" "$seed/release/data/config"
+touch "$seed/release/data/postgres/.gitkeep" "$seed/release/data/config/app.conf"
+APP_DATA_DIR="$seed/app-data" seed_data "$seed/release"
+assert_equal "seeding drops git placeholders and keeps folders and files" \
+  "$(cd "$seed/app-data" && find . | sort | tr '\n' ' ')" ". ./config ./config/app.conf ./postgres "
+
 finish_tests

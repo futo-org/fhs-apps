@@ -1,0 +1,70 @@
+# Upstream: nextcloud/docker .examples/docker-compose/insecure/postgres/apache,
+# with db.env inlined, data under APP_DATA_DIR and no SELinux relabels.
+# The app entrypoint installs on first start and runs `occ upgrade` when the
+# image is newer than the data; it refuses to skip a major version.
+name: nextcloud
+
+x-database: &database
+  POSTGRES_DB: nextcloud
+  POSTGRES_USER: nextcloud
+  POSTGRES_PASSWORD: ${APP_PASSWORD}
+
+# app and cron share it: the image's config/*.config.php read these at runtime
+# (redis.config.php needs REDIS_HOST, or cron jobs lock without Redis).
+x-nextcloud: &nextcloud
+  <<: *database
+  POSTGRES_HOST: db
+  REDIS_HOST: redis
+  NEXTCLOUD_ADMIN_USER: admin
+  NEXTCLOUD_ADMIN_PASSWORD: ${APP_PASSWORD}
+  # Read at first install only. No platform value carries the device's
+  # hostname or IP, so every host is trusted.
+  NEXTCLOUD_TRUSTED_DOMAINS: "*"
+
+services:
+  db:
+    # Postgres 17: the newest major every packaged Nextcloud supports (32: 13-17, 33+: 14-18).
+    image: docker.io/library/postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: always
+    volumes:
+      - ${APP_DATA_DIR}/db:/var/lib/postgresql/data
+    environment:
+      <<: *database
+    healthcheck:
+      # TCP, not the socket: the init server listens on the socket only.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "nextcloud", "-d", "nextcloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  redis:
+    image: docker.io/library/redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    restart: always
+
+  app:
+    image: docker.io/library/nextcloud:32.0.15-apache
+    restart: always
+    ports:
+      - "8081:80"
+    volumes:
+      # The volumes of app and cron must match.
+      - ${APP_DATA_DIR}/html:/var/www/html
+    environment:
+      <<: *nextcloud
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  cron:
+    image: docker.io/library/nextcloud:32.0.15-apache
+    restart: always
+    entrypoint: /cron.sh
+    volumes:
+      - ${APP_DATA_DIR}/html:/var/www/html
+    environment:
+      <<: *nextcloud
+    depends_on:
+      - db
+      - redis

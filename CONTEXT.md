@@ -71,6 +71,22 @@ _Avoid_: external mount (alone), drive
 The one compose file an installed app runs from: the release's stock compose with the compose changes its settings call for, filled in with the chosen values.
 _Avoid_: generated compose, override
 
+**Stock compose**:
+The compose a release ships, kept close to upstream's; every render starts from it.
+_Avoid_: base compose, template
+
+**Fragment**:
+A piece of compose that a setting's choice turns on, merged into the stock compose by docker compose's own rules.
+_Avoid_: override, patch, overlay
+
+**Renderer**:
+The store's `render.sh`, the only code that turns a release and app settings into the rendered compose. CI runs it to validate every release; devices run it to install, update and change settings.
+_Avoid_: generator, templater
+
+**Platform variables**:
+The values every app gets from the device: its id, its app data folder, its app seed and its app password.
+_Avoid_: env (alone), system settings
+
 **Install record**:
 The device's statement of which release an installed app is on. It changes only after a step has started and passed its health check, so it is never ahead of what runs.
 _Avoid_: installed manifest, state
@@ -82,4 +98,28 @@ _Avoid_: plan, chain
 **Rollback**:
 Returning an app to the release and data it had before a failed step, from that step's snapshot. Only the failed step is undone; earlier steps of the path stay landed.
 _Avoid_: revert, downgrade
+
+**Operation**:
+One install, update, settings change, start, stop or uninstall of one app. An app runs one operation at a time.
+_Avoid_: job, task, action
+
+**Preflight**:
+The checks before an update changes anything: the store refreshed, the install record valid, the running app matching its rendered compose.
+_Avoid_: precheck, validation
+
+**Snapshot**:
+A read only copy of app data, taken after the old release stops and before the new one starts; what a rollback restores.
+_Avoid_: backup
+
+**Health gate**:
+The wait after a start for the health check to pass. An operation commits only after it passes; it fails after 30 minutes, or sooner when a service keeps restarting.
+_Avoid_: readiness check
+
+**Journal**:
+What an operation writes before its first change and deletes last, so an operation a crash cut short is finished or undone at the next start.
+_Avoid_: lock file, state file
+
+**Last result**:
+How the latest operation on an app ended (succeeded, rolled back, failed or interrupted), with its reason and output. Kept until the next operation or until dismissed.
+_Avoid_: error, last error
 

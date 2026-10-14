@@ -29,6 +29,9 @@ seed_data() {
   if [[ -d "$dir/data" ]]; then
     cp -a "$dir/data/." "$APP_DATA_DIR/"
   fi
+  # Like the agent: .gitkeep only lets git hold empty folders, and some images
+  # refuse a folder that isn't empty (postgres initdb).
+  find "$APP_DATA_DIR" -type f -name .gitkeep -delete
 }
 
 start_release() {
