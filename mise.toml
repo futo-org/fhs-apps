@@ -20,7 +20,7 @@ description = "Start an app from _template/: <app-id> <app-port>"
 run = "bash scripts/new-app.sh"
 
 [tasks.publish-app]
-description = "Freeze <app>/latest/ into the next release (publish workflow only): <app-id>"
+description = "Freeze each unreleased merge of <app>/latest/ into the next release (publish workflow only): <app-id>"
 run = "bash scripts/publish.sh"
 
 [tasks.ci-run]

@@ -115,7 +115,13 @@ EOF
 EOF
 }
 
-# Prints the path of a new store: the whoami app with nothing published, _template/ and the tooling.
+# commit <store> <message>: commits every change, like a merge to master.
+commit() {
+  git -C "$1" add -A
+  git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm "$2"
+}
+
+# Prints the path of a new git store: the whoami app merged with nothing published, _template/ and the tooling.
 new_store() {
   local store
   store=$(mktemp -d "$test_root/store.XXXXXX")
@@ -126,5 +132,7 @@ new_store() {
   mkdir -p "$store/whoami"
   echo '{"schemaVersion": 1, "appId": "whoami", "appPort": 8080, "releases": []}' > "$store/whoami/manifest.json"
   write_release "$store/whoami/latest"
+  git -C "$store" init -q
+  commit "$store" base
   echo "$store"
 }

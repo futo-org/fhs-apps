@@ -141,6 +141,9 @@ validate_release_folder() {
   if command -v shellcheck > /dev/null && [[ -f "$dir/health-check.sh" ]]; then
     shellcheck -s bash "$dir/health-check.sh" >&2 || fail "$dir/health-check.sh: shellcheck failed"
   fi
+  if [[ -f "$dir/health-check.sh" ]] && grep -v '^\s*#' "$dir/health-check.sh" | grep -qw docker; then
+    fail "$dir/health-check.sh: health checks run unprivileged and can't use docker"
+  fi
 
   if [[ "${SKIP_RENDER:-}" != 1 ]]; then
     render_combinations "$app" "$dir"

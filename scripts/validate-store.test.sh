@@ -13,19 +13,12 @@ published_store() {
   echo "$store"
 }
 
-# Prints a published store committed to git, the base for history checks.
+# Prints a published store with the release committed, the base for history checks.
 committed_store() {
   local store
   store=$(published_store)
-  git -C "$store" init -q
-  git -C "$store" add -A
-  commit "$store" base
+  commit "$store" publish
   echo "$store"
-}
-
-# commit <store> <message>
-commit() {
-  git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qam "$2"
 }
 
 # Prints the problems validate reports, renders skipped: problems <store> [base ref]
@@ -80,6 +73,15 @@ store=$(published_store)
 rm "$store/whoami/latest/health-check.sh"
 assert_problem "rejects a release without its health check" "$(problems "$store")" \
   whoami/latest/health-check.sh missing
+
+store=$(published_store)
+echo 'docker compose ps --status running | grep -q whoami' > "$store/whoami/latest/health-check.sh"
+assert_problem "rejects a health check that uses docker" "$(problems "$store")" \
+  whoami/latest/health-check.sh "can't use docker"
+
+store=$(published_store)
+printf '# unlike docker compose ps, this sees the app serve\ncurl -fsS http://127.0.0.1:8080/\n' > "$store/whoami/latest/health-check.sh"
+assert_equal "accepts docker in a health check comment" "$(problems "$store")" ""
 
 store=$(published_store)
 edit_json "$store/whoami/latest/release.json" '.notes = "new"'
@@ -164,6 +166,7 @@ assert_problem "rejects removing a published release" "$(problems "$store" HEAD)
 
 store=$(committed_store)
 edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'
+commit "$store" bump
 "$store/scripts/publish.sh" whoami > /dev/null
 echo 'exit 0' > "$store/whoami/latest/health-check.sh"
 assert_problem "rejects a new release that is not a copy of latest/" "$(problems "$store" HEAD)" \

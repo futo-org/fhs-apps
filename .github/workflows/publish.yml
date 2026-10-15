@@ -1,8 +1,10 @@
 name: Publish releases
 
-# Every merge that changes an app's latest/ becomes its next release:
-# scripts/publish.sh freezes latest/ into releases/<n+1>/ and appends the
-# manifest entry; the bot commits and pushes. Runs one at a time, in merge order.
+# Every merge that changes an app's latest/ becomes its own release, in merge
+# order: scripts/publish.sh freezes each unreleased merge's latest/ from git
+# history into releases/<n+1>/ and appends the manifest entry; the bot commits
+# and pushes. A merge that lands while a run is queued or retrying, or whose
+# pending run GitHub replaces, is published by the next run.
 on:
   push:
     branches: [master]
