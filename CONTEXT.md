@@ -37,7 +37,7 @@ The release with the highest release number.
 A published release's files, frozen under `releases/<release number>/`; never edited.
 
 **Working copy**:
-An app's `latest/` folder, the only place authors edit; each merge that changes it becomes the next release.
+An app's `latest/` folder, the only place authors edit; a PR that changes it also adds the next release, an exact copy made by `mise run release`.
 _Avoid_: draft
 
 **Health check**:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for the ci-run.sh health gate, on a fake clock.
+# Tests for ci-run.sh: the health gate on a fake clock, seeding, and the update steps.
 set -euo pipefail
 
 # shellcheck source=testing.sh
@@ -56,5 +56,36 @@ touch "$seed/release/data/postgres/.gitkeep" "$seed/release/data/config/app.conf
 APP_DATA_DIR="$seed/app-data" seed_data "$seed/release"
 assert_equal "seeding drops git placeholders and keeps folders and files" \
   "$(cd "$seed/app-data" && find . | sort | tr '\n' ' ')" ". ./config ./config/app.conf ./postgres "
+
+# update_steps <releases>: runs `main update` on a store whoami with that many releases,
+# the release steps faked; sets status and output (the steps, one per "|").
+update_steps() {
+  local store n
+  store=$(new_store)
+  for ((n = 1; n <= $1; n++)); do
+    write_release "$store/whoami/releases/$n" "v1.$n.0"
+  done
+  edit_json "$store/whoami/manifest.json" ".releases = [range(1; $1 + 1) | {version: ., appVersion: \"v1.\\(.).0\", canSkip: false}]"
+  status=0
+  output=$(
+    cd "$store"
+    seed_data() { echo "seed $1"; }
+    render_release() {
+      echo "render $1"
+      : > "${2:-$COMPOSE_FILE}"
+    }
+    start_release() { echo "start $1"; }
+    main update whoami 2>&1
+  ) || status=$?
+  output=${output//$'\n'/|}
+}
+
+update_steps 3
+assert_equal "updates from the release before the newest to the newest" "$status $output" \
+  "0 seed whoami/releases/2|render whoami/releases/2|start whoami/releases/2|render whoami/releases/3|== down (release 2)|start whoami/releases/3|whoami: update passed"
+
+update_steps 1
+assert_equal "skips the update with a single release" "$status $output" \
+  "0 whoami: one release, nothing to update from"
 
 finish_tests

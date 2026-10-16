@@ -19,9 +19,9 @@ run = "bash scripts/render.sh"
 description = "Start an app from _template/: <app-id> <app-port>"
 run = "bash scripts/new-app.sh"
 
-[tasks.publish-app]
-description = "Freeze each unreleased merge of <app>/latest/ into the next release (publish workflow only): <app-id>"
-run = "bash scripts/publish.sh"
+[tasks.release]
+description = "Freeze <app>/latest/ into its next release, in the PR. Env: BASE_REF (default origin/master): <app-id>"
+run = "bash scripts/release.sh"
 
 [tasks.ci-run]
 description = "Run an app like a device, pulls images: install|update <app-id>"

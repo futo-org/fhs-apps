@@ -1,0 +1,2 @@
+# Release folders are exact copies of latest/ (CI checks): collapse them in PR diffs.
+*/releases/** linguist-generated=true

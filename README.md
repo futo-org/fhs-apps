@@ -7,30 +7,32 @@ Apps that FHS devices install and update. Glossary: [CONTEXT.md](CONTEXT.md).
 ```
 catalog.json              # apps shown in the store (name, tagline, icon, ...)
 <app>/
-  manifest.json           # releases, appended by CI; authors edit appPort only
+  manifest.json           # releases, appended by `mise run release`; authors edit appPort only
   latest/                 # working copy: the only folder authors edit
     release.json          # {"appVersion": "v3.3.1", "canSkip": true}
     docker-compose.yml    # stock compose, close to upstream's
     settings.json         # deployment choices and the compose changes they make
     health-check.sh       # exit 0 = serving
     data/                 # seed folders copied into the app's data on install (.gitkeep dropped)
-  releases/<n>/           # frozen copy of latest/ made by CI; never edited
+  releases/<n>/           # frozen copy of latest/ made by `mise run release`; never edited
 _template/                # starting point for a new app
 scripts/                  # bash tooling, run with `mise run <task>`
 ```
 
 ## Releases
 
-* Every merge that changes `<app>/latest/` becomes the next release: the publish workflow
-  runs `mise run publish-app`, which copies `latest/` to `releases/<n+1>/` and appends
-  `{version, appVersion, canSkip}` to the manifest. Never add release folders or manifest
-  entries by hand.
+* A PR that changes `<app>/latest/` also adds its release: run `mise run release <app>`,
+  which copies `latest/` to `releases/<n+1>/` and appends `{version, appVersion, canSkip}`
+  to the manifest. Run it again after every change; it rebuilds the PR's release, so a PR
+  adds exactly one. CI rejects a `latest/` that differs from the newest release, and a PR
+  that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
+  master's side and run it again.
 * `version` is the release number (1, 2, 3, ...); updates follow it. `appVersion` is the
   upstream version, shown to users only.
 * `canSkip: false` makes the release a required stop: every update lands on it and passes
-  its health check before going further. After publishing, the only allowed change is
+  its health check before going further. Once merged, the only allowed change is
   `canSkip` from `false` to `true` in `manifest.json`.
-* Published releases and folders never change; to fix a release, publish a new one.
+* Merged releases and folders never change; to fix a release, add a new one.
 
 ## Settings (`settings.json`)
 
@@ -62,15 +64,17 @@ filling the system disk.
   lives under `${APP_DATA_DIR}`; named volumes, `env_file`, floating tags and SELinux
   `:z`/`:Z` are rejected.
 * Every service sets `restart: always` or `restart: unless-stopped`.
-* `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run.
-  Available tools: bash, coreutils, grep, sed, gawk, jq, curl, docker compose.
+* `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run, as
+  a throwaway unprivileged user. Available tools: bash, coreutils, grep, sed, gawk, jq,
+  curl. No docker.
 
 ## Adding an app
 
 1. `mise run new-app <app-id> <port>` (copies `_template/`).
 2. Fill in `<app>/latest/` and add a `catalog.json` entry.
-3. `mise run validate`, then open a PR. CI also installs `latest/` and, once published,
-   updates from the last release to `latest/` (`mise run ci-run`).
+3. `mise run release <app>` and `mise run validate`, then open a PR. CI also installs
+   `latest/` and, from the second release on, updates from the previous release to the
+   new one (`mise run ci-run`).
 
 ## Tooling
 
@@ -80,7 +84,7 @@ agent runs it on the device, CI runs it here.
 
 ```
 scripts/
-  validate-store.sh, render.sh, new-app.sh, publish.sh, ci-run.sh   commands
+  validate-store.sh, render.sh, new-app.sh, release.sh, ci-run.sh   commands
   *.test.sh                                                        their tests
 ```
 
@@ -88,6 +92,7 @@ scripts/
   docker; `SKIP_RENDER=1` skips renders, `BASE_REF=<ref>` checks published history).
 * `mise run render <release-dir> <app-id> [values.json]`: the compose a device would run.
 * `mise run ci-run install|update <app-id>`: runs the app like a device (pulls images).
-* `mise run publish-app <app-id>`: used by the publish workflow only.
+* `mise run release <app-id>`: freezes `latest/` into the PR's release (`BASE_REF`,
+  default `origin/master`, is the branch the PR merges into).
 * `mise run test`: the tooling's tests (need docker).
 * `mise run lint`: shfmt format check and shellcheck (`lint-fix` formats).

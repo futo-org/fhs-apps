@@ -1,0 +1,16 @@
+# Stock compose, close to upstream's (home-assistant.io, Container install).
+# Host network: discovery (mDNS, SSDP, DHCP) and Bluetooth need the host's.
+# Left out of upstream's: `privileged` (Bluetooth and USB sticks are settings
+# instead) and `TZ` (no platform value; /etc/localtime gives the zone).
+name: homeassistant
+
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:2026.10.1
+    volumes:
+      - ${APP_DATA_DIR}/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    stop_grace_period: 60s
+    network_mode: host

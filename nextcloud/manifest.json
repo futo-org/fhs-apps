@@ -12,6 +12,11 @@
       "version": 2,
       "appVersion": "v33.0.9",
       "canSkip": false
+    },
+    {
+      "version": 3,
+      "appVersion": "v34.0.4",
+      "canSkip": false
     }
   ]
 }

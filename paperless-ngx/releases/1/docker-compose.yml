@@ -1,0 +1,34 @@
+# Upstream's docker/compose/docker-compose.sqlite.yml (v3.3.1), named volumes
+# moved under app data and docker-compose.env inlined.
+name: paperless-ngx
+
+services:
+  broker:
+    image: docker.io/valkey/valkey:9.1.2-alpine
+    restart: unless-stopped
+    volumes:
+      - ${APP_DATA_DIR}/redis:/data
+
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.1
+    restart: unless-stopped
+    depends_on:
+      - broker
+    ports:
+      - "8000:8000"
+    # Every path the image declares as VOLUME is bound, so none lands in an
+    # anonymous volume outside app data.
+    volumes:
+      - ${APP_DATA_DIR}/data:/usr/src/paperless/data
+      - ${APP_DATA_DIR}/media:/usr/src/paperless/media
+      - ${APP_DATA_DIR}/export:/usr/src/paperless/export
+      - ${APP_DATA_DIR}/consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBENGINE: sqlite
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      # Init runs as root, then drops to this uid/gid and chowns data, media,
+      # consume and export to it on every start. 1001 is fhs-core, the owner of
+      # user files and SMB mounts, so a picked consume folder stays writable.
+      USERMAP_UID: "1001"
+      USERMAP_GID: "1001"

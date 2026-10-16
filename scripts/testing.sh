@@ -121,12 +121,12 @@ commit() {
   git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm "$2"
 }
 
-# Prints the path of a new git store: the whoami app merged with nothing published, _template/ and the tooling.
+# Prints the path of a new git store: the whoami app merged with nothing released, _template/ and the tooling.
 new_store() {
   local store
   store=$(mktemp -d "$test_root/store.XXXXXX")
   mkdir -p "$store/scripts"
-  cp "$scripts_dir"/{validate-store,render,publish,new-app}.sh "$store/scripts/"
+  cp "$scripts_dir"/{validate-store,render,release,new-app}.sh "$store/scripts/"
   cp -a "$scripts_dir/../_template" "$store/_template"
   echo '{"schemaVersion": 1, "apps": [{"id": "whoami", "name": "Whoami"}]}' > "$store/catalog.json"
   mkdir -p "$store/whoami"

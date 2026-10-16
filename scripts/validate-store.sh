@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validates the store, strictly (unknown fields fail): catalog.json, every app's
-# manifest, every release folder (published and latest/), published history
-# against BASE_REF, and a render of every settings combination.
+# manifest, every release folder (published and latest/), latest/ released,
+# published history against BASE_REF, and a render of every settings combination.
 #
 # env: BASE_REF     ref to check published history against (CI sets it)
 #      SKIP_RENDER  set to 1 to skip renders when docker is unavailable
@@ -105,6 +105,11 @@ validate_manifest() {
     validate_release_folder "$app" "$app/latest"
   else
     fail "$app/latest: missing"
+  fi
+
+  # Every change to latest/ ships as its release in the same PR.
+  if ((count == 0)) || ! diff -r -q "$app/latest" "$app/releases/$count" > /dev/null 2>&1; then
+    fail "$app/latest: not released: run \`mise run release $app\`"
   fi
 }
 
@@ -241,7 +246,7 @@ render_combinations() {
 }
 
 # Published entries and folders never change; only canSkip may flip false to
-# true. New entries are only appended, and the newest must equal latest/.
+# true. New entries are only appended, one per PR.
 validate_history() {
   local app=$1 base_manifest problem count base_count version
   [[ -n "${BASE_REF:-}" ]] || return 0
@@ -267,8 +272,9 @@ validate_history() {
     git diff --quiet "$BASE_REF" -- "$app/releases/$version" \
       || fail "$app/releases/$version: published release folders never change"
   done
-  if ((count > base_count)) && ! diff -r -q "$app/latest" "$app/releases/$count" > /dev/null; then
-    fail "$app/releases/$count: a new release must be a copy of latest/ (published by the publish workflow)"
+  # One release per PR: a second one would ship content nobody reviewed as latest/.
+  if ((count > base_count + 1)); then
+    fail "$app/manifest.json: a PR adds one release at most, this one adds $((count - base_count))"
   fi
 }
 

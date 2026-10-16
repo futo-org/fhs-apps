@@ -34,4 +34,4 @@ tmp=$(mktemp)
 jq --arg app "$app" --argjson port "$port" '.appId = $app | .appPort = $port' "$app/manifest.json" > "$tmp"
 mv "$tmp" "$app/manifest.json"
 
-echo "$app: created from _template/; fill in $app/latest/ and add a catalog.json entry"
+echo "$app: created from _template/; fill in $app/latest/, add a catalog.json entry, then run \`mise run release $app\`"

@@ -1,0 +1,31 @@
+{
+  "fields": [
+    {
+      "key": "CONSUME_FOLDER",
+      "type": "path",
+      "label": "Inbox folder",
+      "help": "A folder Paperless watches for new documents, such as a scanner's network share. Each file is imported, then deleted from the folder.",
+      "compose": {
+        "services": {
+          "webserver": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${CONSUME_FOLDER}",
+                "target": "/usr/src/paperless/consume",
+                "bind": { "create_host_path": false }
+              }
+            ],
+            "environment": {
+              "PAPERLESS_CONSUMER_POLLING_INTERVAL": "10"
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "PAPERLESS_SECRET_KEY",
+      "type": "generated"
+    }
+  ]
+}

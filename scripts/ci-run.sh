@@ -4,7 +4,7 @@
 # any service or 30 min). Mirrors the agent's install and update steps in bash.
 #
 # usage: ci-run.sh install <app-id>   fresh install of latest/
-#        ci-run.sh update <app-id>    last published release, then update to latest/
+#        ci-run.sh update <app-id>    the release before the newest, then update to the newest
 set -euo pipefail
 
 health_timeout=1800
@@ -81,14 +81,12 @@ wait_healthy() {
 }
 
 main() {
-  cd "$(dirname "$0")/.."
-
   if (($# != 2)) || [[ "$1" != install && "$1" != update ]]; then
     echo "usage: $0 install|update <app-id>" >&2
     exit 2
   fi
 
-  local mode=$1 last
+  local mode=$1 last from to
   app=$2
 
   work=$(mktemp -d)
@@ -108,19 +106,21 @@ main() {
       ;;
     update)
       last=$(jq '.releases | length' "$app/manifest.json")
-      if ((last == 0)); then
-        echo "$app: nothing published yet, skipping update test"
+      if ((last < 2)); then
+        echo "$app: one release, nothing to update from"
         exit 0
       fi
-      seed_data "$app/releases/$last"
-      render_release "$app/releases/$last"
-      start_release "$app/releases/$last"
+      from="$app/releases/$((last - 1))"
+      to="$app/releases/$last"
+      seed_data "$from"
+      render_release "$from"
+      start_release "$from"
       # Like the agent: render next to the running file, stop, then swap.
-      render_release "$app/latest" "$work/next.yml"
-      echo "== down (release $last)"
+      render_release "$to" "$work/next.yml"
+      echo "== down (release $((last - 1)))"
       docker compose down --remove-orphans
       mv "$work/next.yml" "$COMPOSE_FILE"
-      start_release "$app/latest"
+      start_release "$to"
       ;;
   esac
 
@@ -129,5 +129,6 @@ main() {
 
 # Tests source this file for its functions; run as a command otherwise.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  cd "$(dirname "$0")/.."
   main "$@"
 fi
