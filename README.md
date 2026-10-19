@@ -79,18 +79,19 @@ filling the system disk.
 ## Tooling
 
 mise pins shellcheck and shfmt (`mise install`) and runs every command. The scripts are bash and need
-jq and docker on the host, like the device. `scripts/render.sh` is the only renderer: the
+jq and docker on the host, like the device. `scripts/generate-compose.sh` is the only renderer: the
 agent runs it on the device, CI runs it here.
 
 ```
 scripts/
-  validate-store.sh, render.sh, new-app.sh, release.sh, ci-run.sh   commands
+  validate-store.sh, generate-compose.sh, new-app.sh, release.sh, ci-run.sh   commands
   *.test.sh                                                        their tests
 ```
 
 * `mise run validate`: strict checks and a render of every settings combination (needs
   docker; `SKIP_RENDER=1` skips renders, `BASE_REF=<ref>` checks published history).
-* `mise run render <release-dir> <app-id> [values.json]`: the compose a device would run.
+* `mise run generate-compose <release-dir> <app-id> [user_settings.json]`: the compose a
+  device would run.
 * `mise run ci-run install|update <app-id>`: runs the app like a device (pulls images).
 * `mise run release <app-id>`: freezes `latest/` into the PR's release (`BASE_REF`,
   default `origin/master`, is the branch the PR merges into).

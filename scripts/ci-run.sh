@@ -20,7 +20,7 @@ cleanup() {
 render_release() {
   local dir=$1 target=${2:-$COMPOSE_FILE}
   echo "== render $dir"
-  scripts/render.sh "$dir" "$app" > "$target"
+  scripts/generate-compose.sh "$dir" "$app" > "$target"
 }
 
 seed_data() {

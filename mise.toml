@@ -11,9 +11,9 @@ pin = true
 description = "Validate the store. Env: BASE_REF checks published history, SKIP_RENDER=1 skips renders"
 run = "bash scripts/validate-store.sh"
 
-[tasks.render]
-description = "Print the compose a device would run: <release-dir> <app-id> [values.json]"
-run = "bash scripts/render.sh"
+[tasks.generate-compose]
+description = "Print the compose a device would run: <release-dir> <app-id> [user_settings.json]"
+run = "bash scripts/generate-compose.sh"
 
 [tasks.new-app]
 description = "Start an app from _template/: <app-id> <app-port>"

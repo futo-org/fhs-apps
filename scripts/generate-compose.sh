@@ -4,14 +4,14 @@
 # Prints the rendered compose. The agent runs this script on the device, CI runs
 # it to validate; it is the only renderer.
 #
-# usage: render.sh <release-dir> <app-id> [values.json]
-#   values.json: {"KEY": value}; unset keys take the release default.
+# usage: generate-compose.sh <release-dir> <app-id> [user_settings.json]
+#   user_settings.json: {"KEY": value}; unset keys take the release default.
 # The caller provides APP_DATA_DIR, APP_SEED and APP_PASSWORD in the environment.
 # RENDER_FORMAT=json prints JSON instead of YAML.
 set -euo pipefail
 
 if (($# < 2)); then
-  echo "usage: $0 <release-dir> <app-id> [values.json]" >&2
+  echo "usage: $0 <release-dir> <app-id> [user_settings.json]" >&2
   exit 2
 fi
 

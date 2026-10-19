@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for render.sh (needs jq, docker).
+# Tests for generate-compose.sh (needs jq, docker).
 set -euo pipefail
 
 # shellcheck source=testing.sh
@@ -9,9 +9,9 @@ store=$(new_store)
 
 # Prints the rendered whoami service as JSON: rendered_service <values json> [app id]
 rendered_service() {
-  printf '%s' "$1" > "$store/values.json"
+  printf '%s' "$1" > "$store/user_settings.json"
   APP_DATA_DIR=/var/home/app-data/whoami APP_SEED=seed APP_PASSWORD=password RENDER_FORMAT=json \
-    "$store/scripts/render.sh" "$store/whoami/latest" "${2:-whoami}" "$store/values.json" | jq -c '.services.whoami'
+    "$store/scripts/generate-compose.sh" "$store/whoami/latest" "${2:-whoami}" "$store/user_settings.json" | jq -c '.services.whoami'
 }
 
 service=$(rendered_service '{}')

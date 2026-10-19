@@ -233,9 +233,9 @@ render_combinations() {
   }
   work=$(mktemp -d)
   while IFS= read -r values; do
-    printf '%s' "$values" > "$work/values.json"
+    printf '%s' "$values" > "$work/user_settings.json"
     if ! rendered=$(APP_DATA_DIR="/var/home/app-data/$app" APP_SEED=validate APP_PASSWORD=validate \
-      RENDER_FORMAT=json scripts/render.sh "$dir" "$app" "$work/values.json" 2> "$work/err"); then
+      RENDER_FORMAT=json scripts/generate-compose.sh "$dir" "$app" "$work/user_settings.json" 2> "$work/err"); then
       fail "$dir: render failed for $values: $(< "$work/err")"
       continue
     fi

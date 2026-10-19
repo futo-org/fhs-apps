@@ -80,7 +80,7 @@ A piece of compose that a setting's choice turns on, merged into the stock compo
 _Avoid_: override, patch, overlay
 
 **Renderer**:
-The store's `render.sh`, the only code that turns a release and app settings into the rendered compose. CI runs it to validate every release; devices run it to install, update and change settings.
+The store's `generate-compose.sh`, the only code that turns a release and app settings into the rendered compose. CI runs it to validate every release; devices run it to install, update and change settings.
 _Avoid_: generator, templater
 
 **Platform variables**:
