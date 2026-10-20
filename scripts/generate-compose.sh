@@ -23,6 +23,12 @@ values='{}'
 if [[ -n "$values_file" ]]; then
   values=$(< "$values_file")
 fi
+# A broken file must not quietly render the defaults: a picked folder would fall
+# back to app data.
+jq -e 'type == "object"' <<< "$values" > /dev/null 2>&1 || {
+  echo "${values_file:-values}: not a JSON object" >&2
+  exit 1
+}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -58,7 +64,10 @@ env_args=(APP_ID="$app_id")
 compose_args=(-p "$app_id" -f "$release_dir/docker-compose.yml")
 index=0
 
+# Collected first: a jq error inside `< <(...)` would get past set -e.
+fields=$(resolved_fields)
 while IFS= read -r field; do
+  [[ -n "$field" ]] || continue
   key=$(jq -r .key <<< "$field")
   case $(jq -r .type <<< "$field") in
     generated) env_args+=("$key=$(generated_secret "$key")") ;;
@@ -70,6 +79,9 @@ while IFS= read -r field; do
     jq .fragment <<< "$field" > "$work/fragment-$index.json"
     compose_args+=(-f "$work/fragment-$index.json")
   fi
-done < <(resolved_fields)
+done <<< "$fields"
 
-env "${env_args[@]}" docker compose "${compose_args[@]}" config ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}
+# Every profile on: a service a fragment switches off with `profiles: ["off"]`
+# stays in the file, so services that may start without it still load, and
+# `up` skips it.
+env "${env_args[@]}" docker compose --profile '*' "${compose_args[@]}" config ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}

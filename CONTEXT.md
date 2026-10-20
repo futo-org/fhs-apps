@@ -51,9 +51,9 @@ _Avoid_: option, config, parameter
 **Editable**:
 A setting the user may change after install. A setting that is not editable is chosen once, at install.
 
-**App settings**:
-The setting values a user chose for one installed app. Holds only choices; a setting the user never set takes the release's default each time it is used.
-_Avoid_: config, env
+**User settings**:
+The setting values a user chose for one installed app, stored on the device in `user_settings.json` (not the release's `settings.json`). Holds only choices; a setting the user never set takes the release's default each time it is used.
+_Avoid_: app settings, config, env
 
 **Generated secret**:
 A setting no one types or sees, derived from the device and the app each time it is needed, so it is never stored.
@@ -80,11 +80,11 @@ A piece of compose that a setting's choice turns on, merged into the stock compo
 _Avoid_: override, patch, overlay
 
 **Renderer**:
-The store's `generate-compose.sh`, the only code that turns a release and app settings into the rendered compose. CI runs it to validate every release; devices run it to install, update and change settings.
+The store's `generate-compose.sh`, the only code that turns a release and user settings into the rendered compose. CI runs it to validate every release; devices run it to install, update and change settings.
 _Avoid_: generator, templater
 
 **Platform variables**:
-The values every app gets from the device: its id, its app data folder, its app seed and its app password.
+The values every app gets from the device: its id, its app data folder, its app seed, its app password and the device's time zone.
 _Avoid_: env (alone), system settings
 
 **Install record**:

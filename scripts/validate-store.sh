@@ -86,6 +86,7 @@ validate_manifest() {
       || fail "$app/manifest.json: release $version needs a boolean canSkip"
     if [[ -d "$app/releases/$version" ]]; then
       validate_release_folder "$app" "$app/releases/$version"
+      ((version == 1)) || validate_kept_paths "$app/releases/$((version - 1))" "$app/releases/$version" "$((version - 1))"
     else
       fail "$app/releases/$version: missing"
     fi
@@ -142,6 +143,7 @@ validate_release_folder() {
 
   validate_settings "$dir/settings.json"
   validate_compose "$dir/docker-compose.yml"
+  validate_variables "$dir"
 
   if command -v shellcheck > /dev/null && [[ -f "$dir/health-check.sh" ]]; then
     shellcheck -s bash "$dir/health-check.sh" >&2 || fail "$dir/health-check.sh: shellcheck failed"
@@ -202,6 +204,44 @@ validate_settings() {
     end)' "$file")
 }
 
+# Platform variables the system-agent provides; any other variable must be a
+# setting key, or it renders empty without an error.
+platform_variables=(APP_ID APP_DATA_DIR APP_SEED APP_PASSWORD)
+
+# Prints the variable names a file uses, skipping comments and escaped `$$`.
+variable_names() {
+  grep -v '^[[:space:]]*#' "$1" | grep -oP '(?<!\$)\$\{?\K[A-Za-z_][A-Za-z0-9_]*' | sort -u || true
+}
+
+validate_variables() {
+  local dir=$1 known name fragments
+  jq -e . "$dir/settings.json" > /dev/null 2>&1 || return 0
+  known=$(
+    jq -r '.fields[]?.key' "$dir/settings.json"
+    printf '%s\n' "${platform_variables[@]}"
+  )
+  fragments=$(mktemp)
+  jq '[.fields[]?.compose // empty]' "$dir/settings.json" > "$fragments"
+  for name in $(variable_names "$dir/docker-compose.yml"); do
+    grep -qxF "$name" <<< "$known" || fail "$dir/docker-compose.yml: \${$name} is not a setting key or platform variable"
+  done
+  for name in $(variable_names "$fragments"); do
+    grep -qxF "$name" <<< "$known" || fail "$dir/settings.json: \${$name} is not a setting key or platform variable"
+  done
+  rm -f "$fragments"
+}
+
+# An update must never quietly move a user's folder back to app data: a release
+# keeps every path setting of the release before it, as a path.
+validate_kept_paths() {
+  local before=$1 after=$2 number=$3 key
+  [[ -f "$before/settings.json" && -f "$after/settings.json" ]] || return 0
+  for key in $(jq -r '.fields[]? | select(.type == "path") | .key' "$before/settings.json" 2> /dev/null); do
+    jq -e --arg key "$key" 'any(.fields[]?; .key == $key and .type == "path")' "$after/settings.json" > /dev/null 2>&1 \
+      || fail "$after/settings.json: path setting $key of release $number is gone or no longer a path"
+  done
+}
+
 validate_compose() {
   local file=$1
   if grep -qE '^volumes:' "$file"; then fail "$file: named volumes are not allowed"; fi
@@ -241,6 +281,11 @@ render_combinations() {
     fi
     jq -e '[.services[] | .restart] | all(. == "always" or . == "unless-stopped")' <<< "$rendered" > /dev/null \
       || fail "$dir: every service needs restart: always or unless-stopped"
+    # Load it like a device does, without profiles: a service switched off while
+    # another one still needs it only fails here.
+    printf '%s' "$rendered" > "$work/generated.json"
+    docker compose -f "$work/generated.json" config -q 2> "$work/err" \
+      || fail "$dir: the generated compose doesn't load for $values: $(< "$work/err")"
   done < <(value_combinations "$dir/settings.json")
   rm -rf "$work"
 }

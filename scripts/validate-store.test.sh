@@ -158,6 +158,33 @@ sed -i '/restart: unless-stopped/d' "$store/$compose"
 assert_problem "rejects a service without a restart policy, in every render" \
   "$({ "$store/scripts/validate-store.sh" > /dev/null; } 2>&1 || true)" whoami/latest "every service needs restart"
 
+store=$(released_store)
+printf '    depends_on: [sidecar]\n  sidecar:\n    image: docker.io/traefik/whoami:v1.10.1\n    restart: unless-stopped\n' >> "$store/$compose"
+edit_json "$store/whoami/latest/settings.json" '.fields += [{key: "SIDECAR", type: "bool", label: "Sidecar", default: true,
+  compose: {"false": {services: {sidecar: {profiles: ["off"]}}}}}]'
+assert_problem "rejects switching off a service another one needs, in every render" \
+  "$({ "$store/scripts/validate-store.sh" > /dev/null; } 2>&1 || true)" whoami/latest "the generated compose doesn't load"
+
+# Variables.
+
+# shellcheck disable=SC2016 # ${...} here is compose syntax, kept literal on purpose
+{
+  store=$(released_store)
+  edit_json "$store/whoami/latest/settings.json" '.fields[0].compose.services.whoami.volumes[0].source = "${EXPORT_DIRR}"'
+  assert_problem "rejects a fragment variable that is no setting key or platform variable" "$(problems "$store")" \
+    whoami/latest/settings.json '${EXPORT_DIRR} is not a setting key or platform variable'
+
+  store=$(released_store)
+  sed -i 's|VERBOSE: ${VERBOSE}|VERBOSE: ${VERBOSE}\n      WHO: ${USER}|' "$store/whoami/latest/docker-compose.yml"
+  assert_problem "rejects a compose variable that is no setting key or platform variable" "$(problems "$store")" \
+    whoami/latest/docker-compose.yml '${USER} is not a setting key or platform variable'
+
+  store=$(released_store)
+  sed -i 's|VERBOSE: ${VERBOSE}|VERBOSE: ${VERBOSE}\n      LITERAL: $${HOME}|' "$store/whoami/latest/docker-compose.yml"
+  release "$store"
+  assert_equal "accepts an escaped dollar" "$(problems "$store")" ""
+}
+
 # Published history.
 
 store=$(committed_store)
@@ -196,5 +223,11 @@ edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.12.0"'
 release "$store"
 assert_problem "rejects a PR that adds more than one release" "$(problems "$store" "$base")" \
   whoami/manifest.json "a PR adds one release at most, this one adds 2"
+
+store=$(committed_store)
+edit_json "$store/whoami/latest/settings.json" 'del(.fields[0])'
+release "$store"
+assert_problem "rejects a release that drops a path setting the release before it has" "$(problems "$store" HEAD)" \
+  whoami/releases/2/settings.json "path setting EXPORT_DIR of release 1 is gone or no longer a path"
 
 finish_tests

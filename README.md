@@ -55,14 +55,19 @@ Fragments merge into the stock compose with compose's own rules (`docker compose
 -f fragment config`): they add and override; a volume with the same target replaces the
 stock one. `path` fragments must bind with long syntax and
 `"bind": {"create_host_path": false}`, so a missing drive fails the start instead of
-filling the system disk.
+filling the system disk. To switch a service off, give it `profiles: ["off"]`; a service
+that may start without it needs `depends_on` with `required: false`, or CI fails.
+
+A release keeps every `path` setting of the release before it, as a `path`: dropping or
+renaming one would move users' data back to app data on update, so CI rejects it.
 
 ## Compose and health check
 
 * Values reach the compose as `${KEY}` (a bool as `true` or `false`, an unset folder as
   empty), plus platform values `APP_ID`, `APP_DATA_DIR`, `APP_SEED`, `APP_PASSWORD`. Data
   lives under `${APP_DATA_DIR}`; named volumes, `env_file`, floating tags and SELinux
-  `:z`/`:Z` are rejected.
+  `:z`/`:Z` are rejected. Any other `${NAME}` would render empty, so CI rejects it (`$$`
+  for a literal `$`).
 * Every service sets `restart: always` or `restart: unless-stopped`.
 * `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run, as
   a throwaway unprivileged user. Available tools: bash, coreutils, grep, sed, gawk, jq,
@@ -80,7 +85,8 @@ filling the system disk.
 
 mise pins shellcheck and shfmt (`mise install`) and runs every command. The scripts are bash and need
 jq and docker on the host, like the device. `scripts/generate-compose.sh` is the only renderer: the
-agent runs it on the device, CI runs it here.
+agent runs it on the device, CI runs it here. CI pins docker compose to the version the OS
+image ships, since the merge rules are compose's.
 
 ```
 scripts/
