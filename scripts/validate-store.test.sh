@@ -120,6 +120,9 @@ assert_problem "rejects a path bind in short syntax" \
   "$settings" "path binds must use long syntax"
 assert_problem "rejects a duplicate key" "$(settings_problems '.fields += [.fields[1]]')" \
   "$settings" "duplicate key MODE"
+assert_problem "rejects a generated setting, a secret is \${APP_SEED} or \${APP_PASSWORD}" \
+  "$(settings_problems '.fields += [{key: "TOKEN", type: "generated"}]')" \
+  "$settings" "field TOKEN: type must be path, enum or bool"
 
 found=$(settings_problems '.fields[1].default = "turbo" | .fields[2].default = "yes"')
 assert_problem "reports each broken field: the enum" "$found" "$settings" "field MODE: default must be one of the option values"
@@ -159,10 +162,10 @@ assert_problem "rejects a service without a restart policy, in every render" \
   "$({ "$store/scripts/validate-store.sh" > /dev/null; } 2>&1 || true)" whoami/latest "every service needs restart"
 
 store=$(released_store)
-printf '    depends_on: [sidecar]\n  sidecar:\n    image: docker.io/traefik/whoami:v1.10.1\n    restart: unless-stopped\n' >> "$store/$compose"
+printf '    depends_on:\n      sidecar: {condition: service_started, required: false}\n  sidecar:\n    image: docker.io/traefik/whoami:v1.10.1\n    restart: unless-stopped\n' >> "$store/$compose"
 edit_json "$store/whoami/latest/settings.json" '.fields += [{key: "SIDECAR", type: "bool", label: "Sidecar", default: true,
   compose: {"false": {services: {sidecar: {profiles: ["off"]}}}}}]'
-assert_problem "rejects switching off a service another one needs, in every render" \
+assert_problem "rejects switching off a service another one may start without, in every render" \
   "$({ "$store/scripts/validate-store.sh" > /dev/null; } 2>&1 || true)" whoami/latest "the generated compose doesn't load"
 
 # Variables.

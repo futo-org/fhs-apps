@@ -170,18 +170,17 @@ validate_settings() {
       {
         path: ["key", "type", "label", "help", "editable", "compose"],
         enum: ["key", "type", "label", "help", "editable", "compose", "default", "options"],
-        bool: ["key", "type", "label", "help", "editable", "compose", "default"],
-        generated: ["key", "type"]
+        bool: ["key", "type", "label", "help", "editable", "compose", "default"]
       };
     ((keys - ["fields"])[] | "unknown key \"\(.)\""),
     (if (.fields | type) != "array" then "fields must be an array" else
       ([.fields[].key] | group_by(.) | map(select(length > 1) | .[0])[] | "duplicate key \(.)"),
       (.fields[] | . as $f | "field \($f.key // "?")" as $at |
-        if (known_keys | has($f.type // "")) | not then "\($at): type must be path, enum, bool or generated" else
+        if (known_keys | has($f.type // "")) | not then "\($at): type must be path, enum or bool" else
           ((keys - known_keys[$f.type])[] | "\($at): unknown key \"\(.)\" for type \($f.type)"),
           (if ($f.key | type) != "string" or ($f.key | test("^[A-Z][A-Z0-9_]*$") | not) then "\($at): key must be UPPER_SNAKE" else empty end),
           (if ($f.key // "" | test("^(APP_|FHS_|COMPOSE_)")) then "\($at): APP_, FHS_ and COMPOSE_ prefixes are reserved" else empty end),
-          (if $f.type != "generated" and (($f.label | type) != "string" or ($f.label | length) == 0) then "\($at): needs a label" else empty end),
+          (if ($f.label | type) != "string" or ($f.label | length) == 0 then "\($at): needs a label" else empty end),
           (if has("help") and ($f.help | type) != "string" then "\($at): help must be a string" else empty end),
           (if has("editable") and ($f.editable | type) != "boolean" then "\($at): editable must be a boolean" else empty end),
           (if has("compose") and ($f.compose | type) != "object" then "\($at): compose must be an object" else empty end),
@@ -260,7 +259,7 @@ value_combinations() {
       elif .type == "bool" then [true, false]
       elif .type == "path" then [null, "/var/mnt/external/validate/\(.key)"]
       else [null] end;
-    reduce (.fields[] | select(.type != "generated")) as $f ([{}];
+    reduce .fields[] as $f ([{}];
       [.[] as $acc | ($f | choices)[] as $c | $acc + (if $c == null then {} else {($f.key): $c} end)])
     | .[]' "$1"
 }
@@ -281,8 +280,8 @@ render_combinations() {
     fi
     jq -e '[.services[] | .restart] | all(. == "always" or . == "unless-stopped")' <<< "$rendered" > /dev/null \
       || fail "$dir: every service needs restart: always or unless-stopped"
-    # Load it like a device does, without profiles: a service switched off while
-    # another one still needs it only fails here.
+    # Load it like a device does: compose renders some files it then refuses to
+    # load, like a service switched off with a profile that another one needs.
     printf '%s' "$rendered" > "$work/generated.json"
     docker compose -f "$work/generated.json" config -q 2> "$work/err" \
       || fail "$dir: the generated compose doesn't load for $values: $(< "$work/err")"

@@ -45,7 +45,9 @@ setting has a default.
 | `path` | a folder the user picks from indexed external locations; unset = app data | a fragment, applied when a folder is picked |
 | `enum` | one of `options[].value` | map option value → fragment |
 | `bool` | `true` / `false` | map `"true"`/`"false"` → fragment |
-| `generated` | a secret derived on the device; never shown or stored | none |
+
+A secret the app needs is `${APP_SEED}` or `${APP_PASSWORD}`: derived on the device per
+app, the same on every render, never shown or stored.
 
 Field keys: `key` (UPPER_SNAKE, also the env var name; `APP_`, `FHS_`, `COMPOSE_`
 reserved), `type`, `label`, optional `help`, `editable` (default `true`; `false` = chosen
@@ -55,8 +57,8 @@ Fragments merge into the stock compose with compose's own rules (`docker compose
 -f fragment config`): they add and override; a volume with the same target replaces the
 stock one. `path` fragments must bind with long syntax and
 `"bind": {"create_host_path": false}`, so a missing drive fails the start instead of
-filling the system disk. To switch a service off, give it `profiles: ["off"]`; a service
-that may start without it needs `depends_on` with `required: false`, or CI fails.
+filling the system disk. CI loads every rendered combination like a device does and
+rejects one that doesn't load.
 
 A release keeps every `path` setting of the release before it, as a `path`: dropping or
 renaming one would move users' data back to app data on update, so CI rejects it.

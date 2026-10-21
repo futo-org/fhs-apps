@@ -70,7 +70,6 @@ services:
     volumes:
       - ${APP_DATA_DIR}/config:/config
     environment:
-      SECRET: ${SECRET}
       VERBOSE: ${VERBOSE}
     ports:
       - "8080:80"
@@ -108,8 +107,7 @@ EOF
         "true": {"services": {"whoami": {"environment": {"WHOAMI_VERBOSE": "yes"}}}},
         "false": {"services": {"whoami": {"environment": {"WHOAMI_VERBOSE": "no"}}}}
       }
-    },
-    {"key": "SECRET", "type": "generated"}
+    }
   ]
 }
 EOF

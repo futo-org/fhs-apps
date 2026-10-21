@@ -54,12 +54,6 @@ resolved_fields() {
       }' "$release_dir/settings.json"
 }
 
-# Generated secrets: derived from APP_SEED (itself from the device seed). Never
-# change the formula: installed apps already hold the values.
-generated_secret() {
-  printf '%s:%s:%s' "$APP_SEED" "$app_id" "$1" | sha256sum | cut -c1-32
-}
-
 env_args=(APP_ID="$app_id")
 compose_args=(-p "$app_id" -f "$release_dir/docker-compose.yml")
 index=0
@@ -69,10 +63,7 @@ fields=$(resolved_fields)
 while IFS= read -r field; do
   [[ -n "$field" ]] || continue
   key=$(jq -r .key <<< "$field")
-  case $(jq -r .type <<< "$field") in
-    generated) env_args+=("$key=$(generated_secret "$key")") ;;
-    *) env_args+=("$key=$(jq -r 'if .value == null then "" else .value | tostring end' <<< "$field")") ;;
-  esac
+  env_args+=("$key=$(jq -r 'if .value == null then "" else .value | tostring end' <<< "$field")")
 
   if jq -e '.fragment != null' <<< "$field" > /dev/null; then
     index=$((index + 1))
@@ -81,7 +72,4 @@ while IFS= read -r field; do
   fi
 done <<< "$fields"
 
-# Every profile on: a service a fragment switches off with `profiles: ["off"]`
-# stays in the file, so services that may start without it still load, and
-# `up` skips it.
-env "${env_args[@]}" docker compose --profile '*' "${compose_args[@]}" config ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}
+env "${env_args[@]}" docker compose "${compose_args[@]}" config ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}

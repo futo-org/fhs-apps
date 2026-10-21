@@ -22,10 +22,6 @@
           }
         }
       }
-    },
-    {
-      "key": "PAPERLESS_SECRET_KEY",
-      "type": "generated"
     }
   ]
 }
