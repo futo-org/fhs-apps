@@ -5,8 +5,12 @@ How apps are packaged for FHS: what the store publishes and what a device instal
 ## Language
 
 **Store**:
-This repository as cloned on a device; the only source of apps.
-_Avoid_: repo, registry
+The apps a device can install: this repository's `master`, as published. On a device, the unpacked store bundle; the device's only source of apps.
+_Avoid_: repo, registry, clone
+
+**Store bundle**:
+The whole store at one publish, as the single archive a device downloads. It names the commit it was made from, which is the store's identity on the device.
+_Avoid_: snapshot (a copy of app data), tarball, release (one app's package)
 
 **Catalog**:
 The store's list of apps that can be installed.
