@@ -41,6 +41,29 @@ assert_equal "refuses a base that doesn't exist" "$status $output" \
   "1 nope: not found; set BASE_REF to the branch the PR merges into"
 
 store=$(new_store)
+echo '{"appVersion": "v1.10.1",' > "$store/whoami/latest/release.json"
+run env BASE_REF=HEAD "$store/scripts/release.sh" whoami
+assert_equal "an invalid release.json leaves no release behind" \
+  "$((status != 0)) $(jq -c .releases "$store/whoami/manifest.json") $([[ -e "$store/whoami/releases" ]] || echo absent)" \
+  "1 [] absent"
+write_release "$store/whoami/latest"
+run env BASE_REF=HEAD "$store/scripts/release.sh" whoami
+assert_equal "releases after the invalid release.json is fixed, with no cleanup" "$status $output" "0 whoami: release 1 (v1.10.1)"
+
+store=$(new_store)
+release_base=$(git -C "$store" rev-parse HEAD)
+write_release "$store/whoami/latest" v1.11.0 false
+BASE_REF="$release_base" "$store/scripts/release.sh" whoami > /dev/null
+echo '{"appVersion": "v1.11.1",' > "$store/whoami/latest/release.json"
+run env BASE_REF="$release_base" "$store/scripts/release.sh" whoami
+assert_equal "an invalid release.json keeps the release this branch added" \
+  "$((status != 0)) $(jq -c .releases "$store/whoami/manifest.json") $(jq -r .appVersion "$store/whoami/releases/1/release.json")" \
+  '1 [{"version":1,"appVersion":"v1.11.0","canSkip":false}] v1.11.0'
+write_release "$store/whoami/latest" v1.11.1 false
+run env BASE_REF="$release_base" "$store/scripts/release.sh" whoami
+assert_equal "rebuilds the release this branch added once release.json is fixed" "$status $output" "0 whoami: release 1 (v1.11.1)"
+
+store=$(new_store)
 mkdir -p "$store/whoami/releases/1"
 run env BASE_REF=HEAD "$store/scripts/release.sh" whoami
 assert_equal "refuses when the next release folder already exists" "$status $output" \

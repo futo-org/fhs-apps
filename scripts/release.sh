@@ -28,32 +28,35 @@ git rev-parse -q --verify "$base^{commit}" > /dev/null || {
 
 last=$(jq '.releases | length' "$manifest")
 published=$(git show "$base:$manifest" 2> /dev/null | jq '.releases | length') || published=0
+kept=$((last > published ? last - 1 : last))
+next=$((kept + 1))
 
-if ((last > published)); then
-  rm -rf "${app:?}/releases/$last"
-  tmp=$(mktemp)
-  jq '.releases |= .[:-1]' "$manifest" > "$tmp"
-  mv "$tmp" "$manifest"
-  last=$((last - 1))
-fi
+staged=$(mktemp -d)
+trap 'rm -rf "$staged"' EXIT
+jq --argjson kept "$kept" '.releases |= .[:$kept]' "$manifest" > "$staged/manifest.json"
 
-if ((last > 0)) && diff -r -q "$latest" "$app/releases/$last" > /dev/null; then
+if ((kept > 0)) && diff -r -q "$latest" "$app/releases/$kept" > /dev/null; then
+  if ((kept < last)); then
+    rm -rf "${app:?}/releases/$next"
+    mv "$staged/manifest.json" "$manifest"
+  fi
   echo "$app: nothing to release"
   exit 0
 fi
 
-next=$((last + 1))
-if [[ -e "$app/releases/$next" ]]; then
+if ((kept == last)) && [[ -e "$app/releases/$next" ]]; then
   echo "$app/releases/$next: already exists" >&2
   exit 1
 fi
 
-mkdir -p "$app/releases"
-cp -a "$latest" "$app/releases/$next"
-tmp=$(mktemp)
+cp -a "$latest" "$staged/release"
 jq --argjson version "$next" --slurpfile release "$latest/release.json" \
   '.releases += [{version: $version, appVersion: $release[0].appVersion, canSkip: $release[0].canSkip}]' \
-  "$manifest" > "$tmp"
-mv "$tmp" "$manifest"
+  "$staged/manifest.json" > "$staged/manifest.next.json"
+
+mkdir -p "$app/releases"
+rm -rf "${app:?}/releases/$next"
+mv "$staged/release" "$app/releases/$next"
+mv "$staged/manifest.next.json" "$manifest"
 
 echo "$app: release $next ($(jq -r .appVersion "$latest/release.json"))"
