@@ -9,7 +9,7 @@ The apps a device can install: this repository's `master`, as published. On a de
 _Avoid_: repo, registry, clone
 
 **Store bundle**:
-The whole store at one publish, as the single archive a device downloads. It names the commit it was made from, which is the store's identity on the device.
+The whole store at one publish, as the single artifact a device downloads, tagged with the commit it was made from. On the device its digest is its identity and names its folder.
 _Avoid_: snapshot (a copy of app data), tarball, release (one app's package)
 
 **Catalog**:
@@ -100,7 +100,7 @@ Returning an app to the release and data it had before a failed step, from that 
 _Avoid_: revert, downgrade
 
 **Operation**:
-One install, update, settings change, start, stop or uninstall of one app. An app runs one operation at a time.
+One install, update, settings change, start, stop, uninstall or data delete of one app. An app runs one operation at a time. Start, stop and data delete finish inside their request, so they show no progress and leave no last error.
 _Avoid_: job, task, action
 
 **Preflight**:
@@ -119,7 +119,7 @@ _Avoid_: readiness check
 What an operation writes before its first change and deletes last, so an operation a crash cut short is finished or undone at the next start.
 _Avoid_: lock file, state file
 
-**Last result**:
-How the latest operation on an app ended (succeeded, rolled back, failed or interrupted), with its reason and output. Kept until the next operation or until dismissed.
-_Avoid_: error, last error
+**Last error**:
+Why the latest operation on an app failed (`lastError`): its code, message and last lines of output. Empty after a success; kept until the next operation starts or the agent restarts.
+_Avoid_: last result, error (alone)
 
