@@ -1,0 +1,120 @@
+{
+  "fields": [
+    {
+      "key": "MOVIES_FOLDER",
+      "type": "path",
+      "label": "Movies",
+      "help": "A movie folder, mounted read only at /media/movies. In Jellyfin, add a Movies library with that folder and turn off saving subtitles into media folders.",
+      "compose": {
+        "services": {
+          "jellyfin": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${MOVIES_FOLDER}",
+                "target": "/media/movies",
+                "read_only": true,
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "SHOWS_FOLDER",
+      "type": "path",
+      "label": "TV shows",
+      "help": "A TV show folder, mounted read only at /media/shows. In Jellyfin, add a Shows library with that folder and turn off saving subtitles into media folders.",
+      "compose": {
+        "services": {
+          "jellyfin": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${SHOWS_FOLDER}",
+                "target": "/media/shows",
+                "read_only": true,
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "MUSIC_FOLDER",
+      "type": "path",
+      "label": "Music",
+      "help": "A music folder, mounted read only at /media/music. In Jellyfin, add a Music library with that folder.",
+      "compose": {
+        "services": {
+          "jellyfin": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${MUSIC_FOLDER}",
+                "target": "/media/music",
+                "read_only": true,
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "OTHER_MEDIA_FOLDER",
+      "type": "path",
+      "label": "Other media",
+      "help": "Any other folder, such as home videos, books or a second movie drive, mounted read only at /media/other. Add it to a library in Jellyfin and turn off saving subtitles into media folders.",
+      "compose": {
+        "services": {
+          "jellyfin": {
+            "volumes": [
+              {
+                "type": "bind",
+                "source": "${OTHER_MEDIA_FOLDER}",
+                "target": "/media/other",
+                "read_only": true,
+                "bind": { "create_host_path": false }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "TRANSCODE_ACCEL",
+      "type": "enum",
+      "label": "Hardware video transcoding",
+      "help": "Gives Jellyfin the GPU; then pick the matching method in Jellyfin under Dashboard, Playback, Transcoding. Intel, AMD and NVIDIA need an x86_64 device; leave it off on a Raspberry Pi.",
+      "default": "none",
+      "options": [
+        { "value": "none", "label": "Off" },
+        { "value": "intel_amd", "label": "Intel or AMD GPU (Quick Sync, VA-API)" },
+        { "value": "nvidia", "label": "NVIDIA GPU (NVENC)" }
+      ],
+      "compose": {
+        "intel_amd": {
+          "services": { "jellyfin": { "devices": ["/dev/dri:/dev/dri"] } }
+        },
+        "nvidia": {
+          "services": {
+            "jellyfin": {
+              "deploy": {
+                "resources": {
+                  "reservations": {
+                    "devices": [
+                      { "driver": "nvidia", "count": "all", "capabilities": ["gpu"] }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

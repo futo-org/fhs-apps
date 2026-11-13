@@ -1,0 +1,41 @@
+{
+  "fields": [
+    {
+      "key": "BLUETOOTH",
+      "type": "bool",
+      "label": "Bluetooth",
+      "help": "Lets Home Assistant use this server's Bluetooth adapter.",
+      "default": true,
+      "compose": {
+        "true": {
+          "services": {
+            "homeassistant": {
+              "cap_add": ["NET_ADMIN", "NET_RAW"],
+              "volumes": ["/run/dbus:/run/dbus:ro"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "USB_RADIO",
+      "type": "enum",
+      "label": "Zigbee or Z-Wave USB stick",
+      "help": "The USB stick to pass to Home Assistant. Home Assistant doesn't start while the chosen stick is unplugged.",
+      "default": "none",
+      "options": [
+        { "value": "none", "label": "None" },
+        { "value": "ttyUSB0", "label": "/dev/ttyUSB0" },
+        { "value": "ttyACM0", "label": "/dev/ttyACM0" }
+      ],
+      "compose": {
+        "ttyUSB0": {
+          "services": { "homeassistant": { "devices": ["/dev/ttyUSB0:/dev/ttyUSB0"] } }
+        },
+        "ttyACM0": {
+          "services": { "homeassistant": { "devices": ["/dev/ttyACM0:/dev/ttyACM0"] } }
+        }
+      }
+    }
+  ]
+}

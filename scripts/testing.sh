@@ -1,0 +1,130 @@
+# shellcheck shell=bash
+
+scripts_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+test_root=$(mktemp -d)
+trap 'rm -rf "$test_root"' EXIT
+failed=0
+# shellcheck disable=SC2034 # read by the tests
+platform_env=(APP_DATA_DIR=/var/home/app-data/whoami APP_SEED=seed APP_PASSWORD=password APP_TZ=America/Chicago)
+
+run() {
+  # shellcheck disable=SC2034 # read by the tests
+  status=0
+  # shellcheck disable=SC2034 # read by the tests
+  output=$("$@" 2>&1) || status=$?
+}
+
+assert_equal() {
+  if [[ "$2" == "$3" ]]; then
+    echo "ok: $1"
+    return
+  fi
+
+  echo "FAIL: $1: got $2, want $3"
+  failed=1
+}
+
+assert_problem() {
+  local line
+  while IFS= read -r line; do
+    if [[ "$line" == "error: $3: "*"$4"* ]]; then
+      echo "ok: $1"
+      return
+    fi
+  done <<< "$2"
+
+  echo "FAIL: $1: no problem in $3 saying \"$4\"; got:"
+  while IFS= read -r line; do
+    echo "  $line"
+  done <<< "$2"
+  failed=1
+}
+
+finish_tests() {
+  exit "$failed"
+}
+
+edit_json() {
+  local edited
+  edited=$(jq "$2" "$1")
+  printf '%s\n' "$edited" > "$1"
+}
+
+write_release() {
+  local dir=$1
+  mkdir -p "$dir/data/config"
+  touch "$dir/data/config/.gitkeep"
+  jq -n --arg appVersion "${2:-v1.10.1}" --argjson canSkip "${3:-false}" \
+    '{appVersion: $appVersion, canSkip: $canSkip}' > "$dir/release.json"
+  echo 'curl -fsS --max-time 4 http://127.0.0.1:8080/ > /dev/null' > "$dir/health-check.sh"
+  cat > "$dir/docker-compose.yml" << 'EOF'
+name: whoami
+
+services:
+  whoami:
+    image: docker.io/traefik/whoami:v1.10.1
+    volumes:
+      - ${APP_DATA_DIR}/config:/config
+    environment:
+      VERBOSE: ${VERBOSE}
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+EOF
+  cat > "$dir/settings.json" << 'EOF'
+{
+  "fields": [
+    {
+      "key": "EXPORT_DIR",
+      "type": "path",
+      "label": "Export folder",
+      "compose": {
+        "services": {
+          "whoami": {
+            "volumes": [{"type": "bind", "source": "${EXPORT_DIR}", "target": "/config", "bind": {"create_host_path": false}}]
+          }
+        }
+      }
+    },
+    {
+      "key": "MODE",
+      "type": "enum",
+      "label": "Mode",
+      "default": "plain",
+      "options": [{"value": "plain", "label": "Plain"}, {"value": "gpu", "label": "GPU"}],
+      "compose": {"gpu": {"services": {"whoami": {"devices": ["/dev/dri:/dev/dri"]}}}}
+    },
+    {
+      "key": "VERBOSE",
+      "type": "bool",
+      "label": "Verbose",
+      "default": true,
+      "compose": {
+        "true": {"services": {"whoami": {"environment": {"WHOAMI_VERBOSE": "yes"}}}},
+        "false": {"services": {"whoami": {"environment": {"WHOAMI_VERBOSE": "no"}}}}
+      }
+    }
+  ]
+}
+EOF
+}
+
+commit() {
+  git -C "$1" add -A
+  git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm "$2"
+}
+
+new_store() {
+  local store
+  store=$(mktemp -d "$test_root/store.XXXXXX")
+  mkdir -p "$store/scripts"
+  cp "$scripts_dir"/{validate-store,generate-compose,release,new-app}.sh "$store/scripts/"
+  cp -a "$scripts_dir/../_template" "$store/_template"
+  echo '{"schemaVersion": 1, "apps": [{"id": "whoami", "name": "Whoami"}]}' > "$store/catalog.json"
+  mkdir -p "$store/whoami"
+  echo '{"schemaVersion": 1, "appId": "whoami", "appPort": 8080, "releases": []}' > "$store/whoami/manifest.json"
+  write_release "$store/whoami/latest"
+  git -C "$store" init -q
+  commit "$store" base
+  echo "$store"
+}

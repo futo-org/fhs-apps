@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "appId": "vaultwarden",
+  "appPort": 8222,
+  "releases": [
+    {
+      "version": 1,
+      "appVersion": "1.37.4",
+      "canSkip": true
+    }
+  ]
+}

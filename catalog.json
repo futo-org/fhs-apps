@@ -10,6 +10,56 @@
       "developer": "FUTO",
       "website": "https://immich.app",
       "sourceRepo": "https://github.com/immich-app/immich"
+    },
+    {
+      "id": "homeassistant",
+      "name": "Home Assistant",
+      "tagline": "Open source home automation",
+      "description": "Home automation that puts local control and privacy first: connects smart home devices and services, with automations, dashboards and voice control.",
+      "icon": "https://brands.home-assistant.io/homeassistant/icon.png",
+      "developer": "Open Home Foundation",
+      "website": "https://www.home-assistant.io",
+      "sourceRepo": "https://github.com/home-assistant/core"
+    },
+    {
+      "id": "paperless-ngx",
+      "name": "Paperless-ngx",
+      "tagline": "Scan, index and archive all your documents",
+      "description": "Document management system that turns paper into a searchable online archive, with OCR, automatic tagging, and an inbox folder for scanners.",
+      "icon": "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/refs/heads/main/src-ui/src/icon-512.png",
+      "developer": "Paperless-ngx",
+      "website": "https://docs.paperless-ngx.com",
+      "sourceRepo": "https://github.com/paperless-ngx/paperless-ngx"
+    },
+    {
+      "id": "jellyfin",
+      "name": "Jellyfin",
+      "tagline": "Stream your movies, shows and music",
+      "description": "Free software media server that organizes movies, TV shows, music and more, and streams them to web, mobile and TV apps, with optional hardware transcoding.",
+      "icon": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/refs/heads/master/branding/web/icon-transparent.png",
+      "developer": "Jellyfin",
+      "website": "https://jellyfin.org",
+      "sourceRepo": "https://github.com/jellyfin/jellyfin"
+    },
+    {
+      "id": "vaultwarden",
+      "name": "Vaultwarden",
+      "tagline": "Self-hosted password manager compatible with Bitwarden apps",
+      "description": "Lightweight server for the Bitwarden password manager clients: sync passwords, passkeys, notes and cards across browser extensions, desktop and mobile apps. Unofficial; not associated with Bitwarden, Inc.",
+      "icon": "https://raw.githubusercontent.com/dani-garcia/vaultwarden/refs/heads/main/resources/vaultwarden-icon.svg",
+      "developer": "Vaultwarden contributors",
+      "website": "https://github.com/dani-garcia/vaultwarden",
+      "sourceRepo": "https://github.com/dani-garcia/vaultwarden"
+    },
+    {
+      "id": "nextcloud",
+      "name": "Nextcloud",
+      "tagline": "Self-hosted file sync and collaboration",
+      "description": "File sync and sharing on your own server, with desktop and mobile clients and an app store for calendar, contacts and more.",
+      "icon": "https://raw.githubusercontent.com/nextcloud/server/refs/heads/master/core/img/favicon-touch.png",
+      "developer": "Nextcloud GmbH",
+      "website": "https://nextcloud.com",
+      "sourceRepo": "https://github.com/nextcloud/server"
     }
   ]
 }
