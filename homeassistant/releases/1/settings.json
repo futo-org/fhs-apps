@@ -20,8 +20,8 @@
     {
       "key": "USB_RADIO",
       "type": "enum",
-      "label": "Zigbee or Z-Wave USB stick",
-      "help": "The USB stick to pass to Home Assistant. Home Assistant doesn't start while the chosen stick is unplugged.",
+      "label": "Zigbee USB stick",
+      "help": "The Zigbee stick to pass to Home Assistant for its Zigbee (ZHA) integration. Home Assistant doesn't start while the chosen stick is unplugged. A Z-Wave stick needs a Z-Wave JS server, which this app doesn't include.",
       "default": "none",
       "options": [
         { "value": "none", "label": "None" },
