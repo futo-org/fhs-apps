@@ -343,6 +343,10 @@ assert_problem "rejects a manifest appVersion that differs from its release.json
   whoami/manifest.json 'release 1 appVersion "v9.9.9" differs from whoami/releases/1/release.json ("v1.10.1")'
 
 store=$(released_store)
+edit_json "$store/catalog.json" '.apps = []'
+assert_problem "rejects an app that isn't in the catalog" "$(problems "$store")" whoami/manifest.json "whoami is not in catalog.json"
+
+store=$(released_store)
 for dir in latest releases/1; do
   edit_json "$store/whoami/$dir/settings.json" '.fields[1].options = [1]'
 done

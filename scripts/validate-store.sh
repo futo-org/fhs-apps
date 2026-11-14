@@ -69,6 +69,9 @@ validate_catalog() {
   for app in $listed; do
     [[ -f "$app/manifest.json" ]] || fail "catalog.json: lists $app but $app/manifest.json is missing"
   done
+  for app in $(app_ids); do
+    grep -qxF "$app" <<< "$listed" || fail "$app/manifest.json: $app is not in catalog.json"
+  done
 }
 
 validate_manifest() {
