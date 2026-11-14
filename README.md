@@ -82,8 +82,9 @@ renaming one would move users' data back to app data on update, so CI rejects it
   fails on one.
 * Every service sets `restart: always` or `restart: unless-stopped`.
 * The stock compose publishes the app's `appPort` over tcp, and no two apps publish the same host
-  port. An app on `network_mode: host` is taken to use its `appPort`; other ports it
-  opens aren't checked.
+  port. Within one settings combination, no two services publish the same host port and
+  protocol on overlapping addresses. An app on `network_mode: host` is taken to use its
+  `appPort`; other ports it opens aren't checked.
 * `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run, as
   root, with only `PATH=/usr/bin:/usr/sbin`, `HOME`, `LANG=C.UTF-8`, `APP_ID`,
   `APP_DATA_DIR` and `APP_TZ` set: no secrets, no setting values. It can use bash,
