@@ -337,4 +337,46 @@ edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'
 BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
 assert_equal "keeps no history against a base from before the store format" "$(problems "$store" "$base")" ""
 
+store=$(released_store)
+for dir in latest releases/1; do
+  edit_json "$store/whoami/$dir/settings.json" '.fields[1].options = [1]'
+done
+run "$store/scripts/validate-store.sh"
+assert_problem "fails when the settings check can't run on enum options [1]" "$output" \
+  whoami/latest/settings.json "couldn't be checked"
+
+store=$(new_store)
+edit_json "$store/whoami/latest/settings.json" '.fields = []'
+sed -i '/environment:/d; /VERBOSE/d' "$store/whoami/latest/docker-compose.yml"
+release "$store"
+commit "$store" "release 1"
+fakes="$test_root/fakes"
+mkdir -p "$fakes"
+for tool in jq find sort; do
+  # shellcheck disable=SC2016 # expanded when the fake runs
+  printf '#!/usr/bin/env bash\ncount=$(($(cat "$CALLS/%s" 2> /dev/null || echo 0) + 1))\necho "$count" > "$CALLS/%s"\n((count != ${FAIL_AT:-0})) || [[ "$FAIL_TOOL" != %s ]] || exit 3\nexec %q "$@"\n' \
+    "$tool" "$tool" "$tool" "$(type -ap "$tool" | grep -v -m1 /shims/)" > "$fakes/$tool"
+  chmod +x "$fakes/$tool"
+done
+injected() {
+  local calls
+  calls=$(mktemp -d "$test_root/calls.XXXXXX")
+  PATH="$fakes:$PATH" CALLS="$calls" FAIL_TOOL=$1 FAIL_AT=$2 BASE_REF=HEAD "$store/scripts/validate-store.sh" > /dev/null 2>&1 \
+    && echo passed
+  cat "$calls/$1" 2> /dev/null || echo 0
+}
+passed_with_failure=""
+tools_never_called=""
+for tool in jq find sort; do
+  clean=$(injected "$tool" 0)
+  [[ "$clean" == passed* ]] || passed_with_failure+="the run without a failure, "
+  calls=$(tail -1 <<< "$clean")
+  ((calls > 0)) || tools_never_called+="$tool "
+  for ((call = 1; call <= calls; call++)); do
+    [[ "$(injected "$tool" "$call")" != passed* ]] || passed_with_failure+="$tool call $call, "
+  done
+done
+assert_equal "fails whenever a jq, find or sort call it makes fails" "$passed_with_failure" ""
+assert_equal "the failure injection reaches every tool" "$tools_never_called" ""
+
 finish_tests

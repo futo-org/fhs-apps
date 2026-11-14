@@ -14,12 +14,23 @@ command -v jq > /dev/null || {
   exit 2
 }
 
+report_problems() {
+  local at=$1 found problem
+  shift
+  found=$("$@") || {
+    fail "${at:-the store}: couldn't be checked"
+    return
+  }
+  while IFS= read -r problem; do
+    [[ -z "$problem" ]] || fail "${at:+$at: }$problem"
+  done <<< "$found"
+}
+
 validate_links() {
-  local apps name
+  local apps
   mapfile -t apps < <(app_ids)
-  while IFS= read -r name; do
-    fail "$name: only files and folders are allowed in the store"
-  done < <(find catalog.json scripts "${apps[@]}" ! -type f ! -type d 2> /dev/null)
+  report_problems "" find catalog.json scripts "${apps[@]}" ! -type f ! -type d \
+    -printf '%p: only files and folders are allowed in the store\n'
 }
 
 app_ids() {
@@ -33,31 +44,35 @@ app_ids() {
 unknown_keys() {
   local json=$1
   shift
-  jq -r --args '[$ARGS.positional[]] as $allowed | keys - $allowed | .[]' "$@" <<< "$json"
+  jq -r --args '[$ARGS.positional[]] as $allowed | keys - $allowed | .[] | "unknown key \"\(.)\""' "$@" <<< "$json"
 }
 
-validate_catalog() {
-  local catalog app problem
-  catalog=$(< catalog.json)
-  jq -e '.schemaVersion == 1 and (.apps | type == "array")' <<< "$catalog" > /dev/null \
-    || fail "catalog.json: schemaVersion must be 1 and apps an array"
-  for key in $(unknown_keys "$catalog" schemaVersion apps); do
-    fail "catalog.json: unknown key \"$key\""
-  done
-  while IFS= read -r problem; do
-    fail "catalog.json: $problem"
-  done < <(jq -r '
+catalog_problems() {
+  jq -r '
     .apps[]? | . as $app | "\($app.id // "?")" as $at |
     ((keys - ["id", "name", "tagline", "description", "icon", "developer", "website", "sourceRepo"])[] | "\($at): unknown key \"\(.)\""),
     (if has("icon") and (($app.icon | type) != "string" or ($app.icon | test("^https://[^\\s/?#]+([/?#]\\S*)?$") | not))
-      then "\($at): icon must be an absolute https URL" else empty end)' <<< "$catalog")
-  for app in $(jq -r '.apps[].id' <<< "$catalog"); do
+      then "\($at): icon must be an absolute https URL" else empty end)' <<< "$1"
+}
+
+validate_catalog() {
+  local catalog listed app
+  catalog=$(< catalog.json)
+  jq -e '.schemaVersion == 1 and (.apps | type == "array")' <<< "$catalog" > /dev/null \
+    || fail "catalog.json: schemaVersion must be 1 and apps an array"
+  report_problems catalog.json unknown_keys "$catalog" schemaVersion apps
+  report_problems catalog.json catalog_problems "$catalog"
+  listed=$(jq -r '.apps[]?.id' <<< "$catalog") || {
+    fail "catalog.json: couldn't be checked"
+    return
+  }
+  for app in $listed; do
     [[ -f "$app/manifest.json" ]] || fail "catalog.json: lists $app but $app/manifest.json is missing"
   done
 }
 
 validate_manifest() {
-  local app=$1 manifest count version key entry
+  local app=$1 manifest count version entry
   manifest=$(< "$app/manifest.json") || {
     fail "$app/manifest.json: unreadable"
     return
@@ -67,9 +82,7 @@ validate_manifest() {
     return
   }
 
-  for key in $(unknown_keys "$manifest" schemaVersion appId appPort releases); do
-    fail "$app/manifest.json: unknown key \"$key\""
-  done
+  report_problems "$app/manifest.json" unknown_keys "$manifest" schemaVersion appId appPort releases
   [[ $(jq -r .schemaVersion <<< "$manifest") == 1 ]] || fail "$app/manifest.json: schemaVersion must be 1"
   [[ $(jq -r .appId <<< "$manifest") == "$app" ]] || fail "$app/manifest.json: appId must be \"$app\""
   jq -e '(.appPort | tojson | test("^[1-9][0-9]{0,4}$")) and .appPort <= 65535' <<< "$manifest" > /dev/null \
@@ -82,9 +95,7 @@ validate_manifest() {
   count=$(jq '.releases | length' <<< "$manifest")
   for ((version = 1; version <= count; version++)); do
     entry=$(jq -c ".releases[$((version - 1))]" <<< "$manifest")
-    for key in $(unknown_keys "$entry" version appVersion canSkip); do
-      fail "$app/manifest.json: release $version has unknown key \"$key\""
-    done
+    report_problems "$app/manifest.json: release $version" unknown_keys "$entry" version appVersion canSkip
     jq -e --argjson v "$version" '.version == $v' <<< "$entry" > /dev/null \
       || fail "$app/manifest.json: release $version must have version $version (consecutive from 1)"
     jq -e '.appVersion | type == "string" and length > 0' <<< "$entry" > /dev/null \
@@ -138,9 +149,7 @@ validate_release_folder() {
 
   release=$(< "$dir/release.json")
   if jq -e . <<< "$release" > /dev/null 2>&1; then
-    for key in $(unknown_keys "$release" appVersion canSkip healthTimeoutMinutes); do
-      fail "$dir/release.json: unknown key \"$key\""
-    done
+    report_problems "$dir/release.json" unknown_keys "$release" appVersion canSkip healthTimeoutMinutes
     jq -e '(.appVersion | type == "string" and length > 0) and (.canSkip | type == "boolean")' <<< "$release" > /dev/null \
       || fail "$dir/release.json: needs a non empty appVersion and a boolean canSkip"
     jq -e '(has("healthTimeoutMinutes") | not) or ((.healthTimeoutMinutes | tojson | test("^[1-9][0-9]{0,2}$")) and .healthTimeoutMinutes <= 360)' <<< "$release" > /dev/null \
@@ -149,14 +158,16 @@ validate_release_folder() {
     fail "$dir/release.json: not valid json"
   fi
 
-  validate_settings "$dir/settings.json"
-  validate_compose "$dir"
-  validate_variables "$dir"
+  validate_compose_file "$dir/docker-compose.yml"
+  if validate_settings "$dir/settings.json"; then
+    validate_fragments "$dir/settings.json"
+    validate_variables "$dir"
+  fi
 
   if command -v shellcheck > /dev/null && [[ -f "$dir/health-check.sh" ]]; then
     shellcheck -s bash "$dir/health-check.sh" >&2 || fail "$dir/health-check.sh: shellcheck failed"
   fi
-  if [[ -f "$dir/health-check.sh" ]] && grep -v '^\s*#' "$dir/health-check.sh" | grep -qw docker; then
+  if [[ -f "$dir/health-check.sh" ]] && grep -qP '^(?!\s*#).*\bdocker\b' "$dir/health-check.sh"; then
     fail "$dir/health-check.sh: health checks can't use docker"
   fi
 
@@ -165,15 +176,8 @@ validate_release_folder() {
   fi
 }
 
-validate_settings() {
-  local file=$1 problem
-  jq -e . "$file" > /dev/null 2>&1 || {
-    fail "$file: not valid json"
-    return
-  }
-  while IFS= read -r problem; do
-    fail "$file: $problem"
-  done < <(jq -r '
+settings_problems() {
+  jq -r '
     def known_keys:
       {
         path: ["key", "type", "label", "help", "editable", "compose"],
@@ -208,50 +212,67 @@ validate_settings() {
               | "\($at): path binds must use long syntax with bind.create_host_path: false")
           else empty end)
         end)
-    end)' "$file")
+    end)' "$1"
+}
+
+validate_settings() {
+  local file=$1
+  jq -e . "$file" > /dev/null 2>&1 || {
+    fail "$file: not valid json"
+    return 1
+  }
+  report_problems "$file" settings_problems "$file"
 }
 
 platform_variables=(APP_ID APP_DATA_DIR APP_SEED APP_PASSWORD APP_TZ)
 
-variable_names() {
-  grep -v '^[[:space:]]*#' "$1" | grep -oP '(?<!\$)\$\{?\K[A-Za-z_][A-Za-z0-9_]*' | sort -u || true
+unknown_variables() {
+  local known lines names name
+  local -A seen=()
+  known=$(printf '%s\n' "$1" "${platform_variables[@]}")
+  lines=$(sed '/^[[:space:]]*#/d' <<< "$2") || return
+  names=$(grep -oP '(?<!\$)\$\{?\K[A-Za-z_][A-Za-z0-9_]*' <<< "$lines") || (($? == 1)) || return
+  for name in $names; do
+    [[ -z "${seen[$name]:-}" ]] || continue
+    seen[$name]=1
+    grep -qxF "$name" <<< "$known" || echo "\${$name} is not a setting key or platform variable"
+  done
 }
 
 validate_variables() {
-  local dir=$1 known name fragments
-  jq -e . "$dir/settings.json" > /dev/null 2>&1 || return 0
-  known=$(
-    jq -r '.fields[]?.key' "$dir/settings.json"
-    printf '%s\n' "${platform_variables[@]}"
-  )
-  fragments=$(mktemp)
-  jq '[.fields[]?.compose // empty]' "$dir/settings.json" > "$fragments"
-  for name in $(variable_names "$dir/docker-compose.yml"); do
-    grep -qxF "$name" <<< "$known" || fail "$dir/docker-compose.yml: \${$name} is not a setting key or platform variable"
-  done
-  for name in $(variable_names "$fragments"); do
-    grep -qxF "$name" <<< "$known" || fail "$dir/settings.json: \${$name} is not a setting key or platform variable"
-  done
-  rm -f "$fragments"
+  local dir=$1 keys fragments compose
+  if ! keys=$(jq -r '.fields[]?.key' "$dir/settings.json") \
+    || ! fragments=$(jq '[.fields[]?.compose // empty]' "$dir/settings.json") \
+    || ! compose=$(< "$dir/docker-compose.yml"); then
+    fail "$dir: couldn't check its variables"
+    return
+  fi
+  report_problems "$dir/docker-compose.yml" unknown_variables "$keys" "$compose"
+  report_problems "$dir/settings.json" unknown_variables "$keys" "$fragments"
+}
+
+kept_path_problems() {
+  jq -rn --arg number "$1" --slurpfile before "$2" --slurpfile after "$3" '
+    $before[0].fields[]? | select(.type == "path") | .key as $key |
+    if any($after[0].fields[]?; .key == $key and .type == "path") then empty
+    else "path setting \($key) of release \($number) is gone or no longer a path" end'
 }
 
 validate_kept_paths() {
-  local before=$1 after=$2 number=$3 key
+  local before=$1 after=$2 number=$3
   [[ -f "$before/settings.json" && -f "$after/settings.json" ]] || return 0
-  for key in $(jq -r '.fields[]? | select(.type == "path") | .key' "$before/settings.json" 2> /dev/null); do
-    jq -e --arg key "$key" 'any(.fields[]?; .key == $key and .type == "path")' "$after/settings.json" > /dev/null 2>&1 \
-      || fail "$after/settings.json: path setting $key of release $number is gone or no longer a path"
-  done
+  report_problems "$after/settings.json" kept_path_problems "$number" "$before/settings.json" "$after/settings.json"
 }
 
-validate_compose() {
-  local compose="$1/docker-compose.yml" settings="$1/settings.json"
-  if grep -qE '^\s+env_file:' "$compose"; then fail "$compose: env_file is not allowed"; fi
-  if grep -qE '\$\{[A-Z_]+:-' "$compose"; then fail "$compose: unresolved upstream variable"; fi
-  if jq -e '[.fields[]?.compose // empty | .. | objects | select(has("env_file"))] | length > 0' "$settings" > /dev/null 2>&1; then
-    fail "$settings: env_file is not allowed"
-  fi
-  if grep -qE '\$\{[A-Z_]+:-' "$settings"; then fail "$settings: unresolved upstream variable"; fi
+validate_compose_file() {
+  if grep -qE '^\s+env_file:' "$1"; then fail "$1: env_file is not allowed"; fi
+  if grep -qE '\$\{[A-Z_]+:-' "$1"; then fail "$1: unresolved upstream variable"; fi
+}
+
+validate_fragments() {
+  report_problems "$1" jq -r '
+    if [.fields[]?.compose // empty | .. | objects | select(has("env_file"))] != [] then "env_file is not allowed" else empty end' "$1"
+  if grep -qE '\$\{[A-Z_]+:-' "$1"; then fail "$1: unresolved upstream variable"; fi
 }
 
 compose_problems() {
@@ -284,47 +305,63 @@ value_combinations() {
 }
 
 render_combinations() {
-  local app=$1 dir=$2 values rendered work problem
+  local app=$1 dir=$2 combinations values rendered work found problem
   command -v docker > /dev/null || {
     fail "docker is required to render (set SKIP_RENDER=1 to skip)"
     return
   }
+  if ! combinations=$(value_combinations "$dir/settings.json"); then
+    fail "$dir: couldn't list the settings combinations to render"
+    return
+  fi
+  [[ -n "$combinations" ]] || fail "$dir/settings.json: no settings combination to render"
   work=$(mktemp -d)
   : > "$work/problems"
   while IFS= read -r values; do
+    [[ -n "$values" ]] || continue
     printf '%s' "$values" > "$work/user_settings.json"
     if ! rendered=$(APP_DATA_DIR="/var/home/app-data/$app" APP_SEED=validate APP_PASSWORD=validate APP_TZ=Etc/UTC \
       RENDER_FORMAT=json scripts/generate-compose.sh "$dir" "$app" "$work/user_settings.json" 2> "$work/err"); then
       fail "$dir: render failed for $values: $(< "$work/err")"
       continue
     fi
-    compose_problems "$rendered" "$values" >> "$work/problems"
+    if ! found=$(compose_problems "$rendered" "$values"); then
+      fail "$dir: couldn't check the render for $values"
+      continue
+    fi
+    printf '%s\n' "$found" >> "$work/problems"
     printf '%s' "$rendered" > "$work/rendered.json"
     docker compose -f "$work/rendered.json" config -q 2> "$work/err" \
       || fail "$dir: the rendered compose doesn't load for $values: $(< "$work/err")"
-  done < <(value_combinations "$dir/settings.json")
-  while IFS=$'\t' read -r problem values; do
-    fail "$dir: $problem (with $values)"
-  done < <(sort -s -u -t $'\t' -k1,1 "$work/problems")
+  done <<< "$combinations"
+  if found=$(sort -s -u -t $'\t' -k1,1 "$work/problems"); then
+    while IFS=$'\t' read -r problem values; do
+      [[ -z "$problem" ]] || fail "$dir: $problem (with $values)"
+    done <<< "$found"
+  else
+    fail "$dir: couldn't sort the render problems"
+  fi
   rm -rf "$work"
 }
 
+history_problems() {
+  jq -rn --argjson base "$1" --slurpfile now "$2" '
+    $now[0] as $now |
+    (if $base.appId != $now.appId then "appId must not change" else empty end),
+    (if $base.schemaVersion != $now.schemaVersion then "schemaVersion must not change here" else empty end),
+    ($base.releases | to_entries[] | .key as $i | .value as $old | $now.releases[$i] as $new |
+      if $new == null then "published release \($old.version) was removed"
+      elif $new.version != $old.version or $new.appVersion != $old.appVersion then "published release \($old.version) changed"
+      elif $new.canSkip != $old.canSkip and ($old.canSkip or ($new.canSkip | not)) then "release \($old.version): canSkip may only change from false to true"
+      else empty end)'
+}
+
 validate_history() {
-  local app=$1 base_manifest problem count base_count=0 version
+  local app=$1 base_manifest count base_count=0 version
   [[ -n "${BASE_REF:-}" ]] || return 0
 
   if base_manifest=$(git show "$BASE_REF:$app/manifest.json" 2> /dev/null); then
-    while IFS= read -r problem; do
-      fail "$app/manifest.json: $problem"
-    done < <(jq -rn --argjson base "$base_manifest" --slurpfile now "$app/manifest.json" '
-      $now[0] as $now |
-      (if $base.appId != $now.appId then "appId must not change" else empty end),
-      (if $base.schemaVersion != $now.schemaVersion then "schemaVersion must not change here" else empty end),
-      ($base.releases | to_entries[] | .key as $i | .value as $old | $now.releases[$i] as $new |
-        if $new == null then "published release \($old.version) was removed"
-        elif $new.version != $old.version or $new.appVersion != $old.appVersion then "published release \($old.version) changed"
-        elif $new.canSkip != $old.canSkip and ($old.canSkip or ($new.canSkip | not)) then "release \($old.version): canSkip may only change from false to true"
-        else empty end)')
+    report_problems "$app/manifest.json" history_problems "$base_manifest" "$app/manifest.json"
     base_count=$(jq '.releases | length' <<< "$base_manifest")
   fi
 
@@ -339,11 +376,16 @@ validate_history() {
 }
 
 validate_removed_apps() {
-  local manifest
+  local published path
   [[ -n "${BASE_REF:-}" ]] || return 0
-  for manifest in $(git ls-tree -r --name-only "$BASE_REF" | grep -E '^[^_./][^/]*/manifest\.json$'); do
-    [[ -f "$manifest" ]] || fail "$manifest: a published app can't be removed"
-  done
+  published=$(git ls-tree -r --name-only "$BASE_REF") || {
+    fail "$BASE_REF: couldn't list its apps"
+    return
+  }
+  while IFS= read -r path; do
+    [[ "$path" =~ ^[^_./][^/]*/manifest\.json$ ]] || continue
+    [[ -f "$path" ]] || fail "$path: a published app can't be removed"
+  done <<< "$published"
 }
 
 if [[ -n "${BASE_REF:-}" ]] && ! git rev-parse --verify -q "$BASE_REF^{commit}" > /dev/null; then

@@ -78,9 +78,10 @@ while IFS= read -r field; do
   key=$(jq -r .key <<< "$field")
   env_args+=("$key=$(jq -r 'if .value == null then "" else .value | tostring end' <<< "$field")")
 
-  if jq -e '.fragment != null' <<< "$field" > /dev/null; then
+  fragment=$(jq -c .fragment <<< "$field")
+  if [[ "$fragment" != null ]]; then
     index=$((index + 1))
-    jq .fragment <<< "$field" > "$work/fragment-$index.json"
+    printf '%s\n' "$fragment" > "$work/fragment-$index.json"
     compose_args+=(-f "$work/fragment-$index.json")
   fi
 done <<< "$fields"
