@@ -290,6 +290,14 @@ compose_problems() {
   jq -r --arg values "$2" --argjson port "$3" "$published_ports"'
     (if any(.services[]; .network_mode == "host") or any(.services[].ports[]? | select((.protocol // "tcp") == "tcp") | published_ports; . == $port) then empty
       else "appPort \($port) isn'"'"'t published" end),
+    ([.services | to_entries[] | .key as $service | .value |
+      if .network_mode == "host" then {service: $service, port: $port, protocol: "tcp", ip: ""}
+      else .ports[]? | {service: $service, protocol: (.protocol // "tcp"), ip: (.host_ip // ""), port: published_ports} end]
+      | group_by([.port, .protocol])[] | . as $entries
+      | [range(length) as $i | range($i + 1; length) as $j | [$entries[$i], $entries[$j]]
+        | select(any(.[].ip; IN("", "0.0.0.0", "::")) or .[0].ip == .[1].ip)]
+      | select(length > 0)
+      | "host port \(.[0][0].port)/\(.[0][0].protocol) is published twice, by \([.[][].service] | unique | join(" and "))"),
     (.services | to_entries[] | .key as $service | .value |
       (if (.restart // "" | IN("always", "unless-stopped")) | not then "\($service): needs restart: always or unless-stopped" else empty end),
       (if has("container_name") then "\($service): container_name is not allowed, container names are global on the host" else empty end),

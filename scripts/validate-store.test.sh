@@ -397,6 +397,37 @@ release "$store"
 run "$store/scripts/validate-store.sh"
 assert_equal "accepts a host network app, its appPort taken as published" "$status" 0
 
+# shellcheck disable=SC2329
+with_sidecar() {
+  local option=$1 service=$2 ports
+  shift 2
+  ports=$(jq -nc '$ARGS.positional' --args "$@")
+  edit_json whoami/latest/settings.json \
+    ".fields[1].compose.$option.services.$service = {image: \"docker.io/traefik/whoami:v1.10.1\", restart: \"unless-stopped\", ports: $ports}"
+}
+
+accepted_ports() {
+  local case=$1 store edit
+  shift
+  store=$(released_store)
+  for edit in "$@"; do
+    (cd "$store" && eval "$edit")
+  done
+  release "$store"
+  run "$store/scripts/validate-store.sh"
+  assert_equal "accepts $case" "$status" 0
+}
+
+assert_rendered_problem "rejects a host port two services publish in a non default option" \
+  "host port 8080/tcp is published twice, by sidecar and whoami" "with_sidecar gpu sidecar 8080:80"
+assert_rendered_problem "rejects a port range overlapping another service's host port" \
+  "host port 8080/tcp is published twice, by sidecar and whoami" "with_sidecar gpu sidecar 8079-8081:80-82"
+assert_rendered_problem "rejects a host port on one address when another service takes every address" \
+  "host port 8080/tcp is published twice, by sidecar and whoami" "with_sidecar gpu sidecar 127.0.0.1:8080:80"
+accepted_ports "the same host port over another protocol" "with_sidecar gpu sidecar 8080:80/udp"
+accepted_ports "one host port on two addresses" "with_sidecar gpu first 127.0.0.1:8090:80" "with_sidecar gpu second 192.168.1.5:8090:80"
+accepted_ports "one host port in two options that never run together" "with_sidecar plain first 8090:80" "with_sidecar gpu second 8090:80"
+
 store=$(released_store)
 add_second_app "$store"
 for dir in latest releases/1; do
