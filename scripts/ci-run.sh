@@ -65,13 +65,19 @@ count_restarts() {
 }
 
 run_health_check() {
-  (cd "$1" && timeout -s KILL 5 env -i PATH=/usr/bin:/usr/sbin HOME=/var/roothome LANG=C.UTF-8 \
+  said=$(cd "$1" && timeout -s KILL 5 env -i PATH=/usr/bin:/usr/sbin HOME=/var/roothome LANG=C.UTF-8 \
     APP_ID="$APP_ID" APP_DATA_DIR="$APP_DATA_DIR" APP_TZ="$APP_TZ" \
-    bash -euo pipefail ./health-check.sh < /dev/null > /dev/null 2>&1)
+    bash -euo pipefail ./health-check.sh < /dev/null 2>&1)
+}
+
+fail_gate() {
+  docker compose logs --tail 50 >&2 || true
+  echo "$1, the health check said:" >&2
+  echo "  ${said//$'\n'/$'\n'  }" >&2
 }
 
 wait_healthy() {
-  local dir=$1 started elapsed timeout_minutes restarts
+  local dir=$1 started elapsed timeout_minutes restarts said
   timeout_minutes=$(jq '.healthTimeoutMinutes // 30' "$dir/release.json")
   started=$(date +%s)
   restarts_at_start=()
@@ -79,19 +85,25 @@ wait_healthy() {
   echo "== health gate ($dir/health-check.sh, $timeout_minutes min)"
   while true; do
     if run_health_check "$dir"; then
+      if [[ -n "$said" ]]; then
+        fail_gate "a passing health check must print nothing"
+        return 1
+      fi
       echo "healthy after $(($(date +%s) - started)) s"
       return 0
     fi
+    if [[ -z "$said" ]]; then
+      echo "the health check failed without saying why: print what it asked and what it got" >&2
+      return 1
+    fi
     count_restarts
     if ((restarts >= 5)); then
-      echo "a container restarted $restarts times since the gate started" >&2
-      docker compose logs --tail 50 >&2 || true
+      fail_gate "a container restarted $restarts times since the gate started"
       return 1
     fi
     elapsed=$(($(date +%s) - started))
     if ((elapsed >= timeout_minutes * 60)); then
-      echo "not healthy after $timeout_minutes min" >&2
-      docker compose logs --tail 50 >&2 || true
+      fail_gate "not healthy after $timeout_minutes min"
       return 1
     fi
     sleep 5

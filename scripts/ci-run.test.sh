@@ -40,21 +40,30 @@ with_device_env() {
   "$@"
 }
 
+failing_says="answered 502"
+passing_says=
 gate() {
   local dir release='{}'
   (($# < 4)) || release=$4
   now=0 sleeps=() restarts_before=$2 restarts_after=$3
   dir=$(mktemp -d "$test_root/gate.XXXXXX")
   echo "$1" > "$dir/pass_at"
+  printf '%s' "$failing_says" > "$dir/failing_says"
+  printf '%s' "$passing_says" > "$dir/passing_says"
   echo "$release" > "$dir/release.json"
   cat > "$dir/health-check.sh" << 'EOF'
 echo check >> checks
 pass_at=$(< pass_at)
-((pass_at > 0 && $(wc -l < checks) >= pass_at))
+if ((pass_at > 0 && $(wc -l < checks) >= pass_at)); then
+  cat passing_says
+  exit 0
+fi
+[[ ! -s failing_says ]] || echo "check $(wc -l < checks): $(< failing_says)"
+exit 1
 EOF
   status=0
   with_device_env wait_healthy "$dir" > "$dir/output" 2>&1 || status=$?
-  output=$(tail -1 "$dir/output")
+  output=$(grep -v '^== ' "$dir/output" | paste -sd '|')
   checks=$(wc -l < "$dir/checks")
 }
 
@@ -64,7 +73,7 @@ assert_equal "is healthy as soon as the check passes, checking every interval" \
 
 gate 0 0 5
 assert_equal "fails without waiting for the timeout once a container restarted 5 times" \
-  "$status $checks ${sleeps[*]} | $output" "1 2 5 | a container restarted 5 times since the gate started"
+  "$status $checks ${sleeps[*]} | $output" "1 2 5 | a container restarted 5 times since the gate started, the health check said:|  check 2: answered 502"
 
 gate 3 7 7
 assert_equal "passes for a container that had 7 restarts before the gate and doesn't restart again" \
@@ -72,15 +81,27 @@ assert_equal "passes for a container that had 7 restarts before the gate and doe
 
 gate 0 2 6 '{"healthTimeoutMinutes": 1}'
 assert_equal "counts restarts from each container's first read" \
-  "$status $checks | $output" "1 13 | not healthy after 1 min"
+  "$status $checks | $output" "1 13 | not healthy after 1 min, the health check said:|  check 13: answered 502"
 
 gate 0 0 0 '{"healthTimeoutMinutes": 2}'
 assert_equal "fails when the app is still unhealthy at the release's healthTimeoutMinutes" \
-  "$status $checks | $output" "1 25 | not healthy after 2 min"
+  "$status $checks | $output" "1 25 | not healthy after 2 min, the health check said:|  check 25: answered 502"
 
 gate 0 0 0
 assert_equal "fails when the app is still unhealthy at 30 minutes without healthTimeoutMinutes" \
-  "$status $checks | $output" "1 361 | not healthy after 30 min"
+  "$status $checks | $output" "1 361 | not healthy after 30 min, the health check said:|  check 361: answered 502"
+
+failing_says=
+gate 3 0 0
+failing_says="answered 502"
+assert_equal "fails at the first failing check that prints nothing" \
+  "$status $checks | $output" "1 1 | the health check failed without saying why: print what it asked and what it got"
+
+passing_says="all good"
+gate 1 0 0
+passing_says=
+assert_equal "fails when a passing check prints" \
+  "$status $checks | $output" "1 1 | a passing health check must print nothing, the health check said:|  all good"
 
 check_env=$(mktemp -d "$test_root/env.XXXXXX")
 echo '{}' > "$check_env/release.json"

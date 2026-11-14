@@ -86,6 +86,11 @@ renaming one would move users' data back to app data on update, so CI rejects it
   root, with only `PATH=/usr/bin:/usr/sbin`, `HOME`, `LANG=C.UTF-8`, `APP_ID`,
   `APP_DATA_DIR` and `APP_TZ` set: no secrets, no setting values. It can use bash,
   coreutils, grep, sed, gawk, jq and curl, nothing else. No docker.
+* A failing `health-check.sh` says why in one or two plain lines a user or support can act
+  on: what it asked and what it got (the URL and status code, still installing, in
+  maintenance mode). The device shows the last 20 lines it printed when the health gate
+  gives up, so a silent check leaves the user with nothing. A passing one prints nothing.
+  `ci-run` fails on either.
 * `catalog.json` icons are absolute `https` URLs, and every app is in `catalog.json`.
 
 ## Adding an app
