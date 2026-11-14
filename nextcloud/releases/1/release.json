@@ -1,4 +1,5 @@
 {
   "appVersion": "v32.0.15",
-  "canSkip": false
+  "canSkip": false,
+  "healthTimeoutMinutes": 10
 }

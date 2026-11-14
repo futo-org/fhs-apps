@@ -34,7 +34,9 @@ scripts/                  # bash tooling, run with `mise run <task>`
   its health check before going further. Once merged, the only allowed change is
   `canSkip` from `false` to `true` in `manifest.json`.
 * `healthTimeoutMinutes` (optional, 1 to 360, default 30) is how long the health gate waits
-  for this release to pass its health check, for a migration that takes longer.
+  for this release to pass its health check. Set it from the times `ci-run` prints
+  (`healthy after N s`) with a clear margin: longer for a slow migration, shorter for an
+  app that can get stuck, so the user isn't kept waiting for a start that won't finish.
 * Merged releases and folders never change; to fix a release, add a new one.
 
 ## Settings (`settings.json`)
