@@ -46,6 +46,7 @@
       "key": "TRANSCODE_ACCEL",
       "type": "enum",
       "label": "Hardware video transcoding",
+      "help": "Gives Immich the GPU; then pick the matching hardware acceleration in Immich's admin page under Video transcoding settings.",
       "default": "none",
       "options": [
         { "value": "none", "label": "Off" },
