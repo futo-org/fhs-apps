@@ -173,9 +173,9 @@ validate_release_folder() {
     fail "$dir/release.json: not valid json"
   fi
 
-  validate_compose_file "$dir/docker-compose.yml"
+  validate_no_upstream_defaults "$dir/docker-compose.yml"
   if validate_settings "$dir/settings.json"; then
-    validate_fragments "$dir/settings.json"
+    validate_no_upstream_defaults "$dir/settings.json"
     validate_variables "$dir"
   fi
 
@@ -279,14 +279,7 @@ validate_kept_paths() {
   report_problems "$after/settings.json" kept_path_problems "$number" "$before/settings.json" "$after/settings.json"
 }
 
-validate_compose_file() {
-  if grep -qE '^\s+env_file:' "$1"; then fail "$1: env_file is not allowed"; fi
-  if grep -qE '\$\{[A-Z_]+:-' "$1"; then fail "$1: unresolved upstream variable"; fi
-}
-
-validate_fragments() {
-  report_problems "$1" jq -r '
-    if [.fields[]?.compose // empty | .. | objects | select(has("env_file"))] != [] then "env_file is not allowed" else empty end' "$1"
+validate_no_upstream_defaults() {
   if grep -qE '\$\{[A-Z_]+:-' "$1"; then fail "$1: unresolved upstream variable"; fi
 }
 
@@ -300,6 +293,7 @@ compose_problems() {
     (.services | to_entries[] | .key as $service | .value |
       (if (.restart // "" | IN("always", "unless-stopped")) | not then "\($service): needs restart: always or unless-stopped" else empty end),
       (if has("container_name") then "\($service): container_name is not allowed, container names are global on the host" else empty end),
+      (if has("env_file") then "\($service): env_file is not allowed" else empty end),
       ((.image // "") as $image |
         if ($image | test(":[^/]+$") | not) then "\($service): image \($image) must be pinned to a tag"
         elif ($image | test(":(latest|release)(@|$)")) then "\($service): image \($image) has a floating tag"

@@ -86,4 +86,4 @@ while IFS= read -r field; do
   fi
 done <<< "$fields"
 
-env "${env_args[@]}" docker compose "${compose_args[@]}" config --no-path-resolution ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}
+env "${env_args[@]}" docker compose "${compose_args[@]}" config --no-path-resolution --no-env-resolution ${RENDER_FORMAT:+--format "$RENDER_FORMAT"}

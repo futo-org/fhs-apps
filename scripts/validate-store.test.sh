@@ -231,13 +231,17 @@ assert_rendered_problem() {
     "printf '    depends_on:\n      sidecar: {condition: service_started, required: false}\n  sidecar:\n    image: docker.io/traefik/whoami:v1.10.1\n    restart: unless-stopped\n' >> $compose && edit_json $gpu_fragment '.fields += [{key: \"SIDECAR\", type: \"bool\", label: \"Sidecar\", default: true, compose: {\"false\": {services: {sidecar: {profiles: [\"off\"]}}}}}]'"
 }
 
-store=$(released_store)
-sed -i 's#^    restart: unless-stopped$#&\n    env_file: whoami.env#' "$store/$compose"
-assert_problem "rejects env_file" "$(problems "$store")" "$compose" "env_file is not allowed"
-
-store=$(released_store)
-edit_json "$store/$gpu_fragment" '.fields[1].compose.gpu.services.whoami.env_file = "whoami.env"'
-assert_problem "rejects env_file in a fragment" "$(problems "$store")" "$gpu_fragment" "env_file is not allowed"
+# shellcheck disable=SC2016 # edits run in the store, compose syntax kept literal
+{
+  assert_rendered_problem "rejects env_file" "whoami: env_file is not allowed" \
+    "touch whoami/latest/data/app.env && sed -i 's#^    restart: unless-stopped\$#&\n    env_file: data/app.env#' $compose"
+  assert_rendered_problem "rejects env_file in a fragment" "whoami: env_file is not allowed" \
+    "touch whoami/latest/data/app.env && edit_json $gpu_fragment '.fields[1].compose.gpu.services.whoami.env_file = \"data/app.env\"'"
+  for ban in "env_file: data/app.env" "container_name: inline"; do
+    assert_rendered_problem "rejects $ban in an inline service" "inline: ${ban%%:*} is not allowed" \
+      "touch whoami/latest/data/app.env && sed -i 's#^    restart: unless-stopped\$#&\n  inline: {image: docker.io/traefik/whoami:v1.10.1, restart: unless-stopped, $ban}#' $compose"
+  done
+}
 
 # shellcheck disable=SC2016 # ${...} here is compose syntax, kept literal on purpose
 {
