@@ -1,0 +1,18 @@
+name: Docker compose
+description: Install the docker compose the OS image ships, since the merge rules are compose's
+
+runs:
+  using: composite
+  steps:
+    - name: Install docker compose 5.7.1
+      shell: bash
+      env:
+        COMPOSE_VERSION: 5.7.1
+        COMPOSE_SHA256: af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf
+      run: |
+        mkdir -p ~/.docker/cli-plugins
+        curl -fsSL -o ~/.docker/cli-plugins/docker-compose \
+          "https://github.com/docker/compose/releases/download/v$COMPOSE_VERSION/docker-compose-linux-x86_64"
+        echo "$COMPOSE_SHA256  $HOME/.docker/cli-plugins/docker-compose" | sha256sum -c
+        chmod +x ~/.docker/cli-plugins/docker-compose
+        docker compose version
