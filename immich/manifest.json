@@ -1,12 +1,27 @@
 {
   "schemaVersion": 1,
   "appId": "immich",
+  "appPort": 2283,
   "releases": [
     {
-      "version": "1.107.2",
-      "requiredStop": true
+      "version": 1,
+      "appVersion": "v1.107.2",
+      "canSkip": false
+    },
+    {
+      "version": 2,
+      "appVersion": "v1.132.3",
+      "canSkip": true
+    },
+    {
+      "version": 3,
+      "appVersion": "v1.135.3",
+      "canSkip": false
+    },
+    {
+      "version": 4,
+      "appVersion": "v3.3.1",
+      "canSkip": true
     }
-  ],
-  "healthCheckUrl": "/api/server/ping",
-  "appPort": 2283
+  ]
 }

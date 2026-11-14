@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "appId": "jellyfin",
+  "appPort": 8096,
+  "releases": [
+    {
+      "version": 1,
+      "appVersion": "v12.2",
+      "canSkip": false
+    }
+  ]
+}
