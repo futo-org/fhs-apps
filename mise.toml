@@ -1,6 +1,9 @@
 [tools]
 "aqua:koalaman/shellcheck" = "0.11.0"
 "aqua:mvdan/sh" = "3.13.1"
+"aqua:oras-project/oras" = "1.3.6"
+"aqua:sigstore/cosign" = "3.1.4"
+"aqua:google/go-containerregistry" = "0.22.1"
 
 [settings]
 pin = true
@@ -24,6 +27,18 @@ run = "bash scripts/release.sh"
 [tasks.ci-run]
 description = "Run an app like a device, pulls images: install|update <app-id>"
 run = "bash scripts/ci-run.sh"
+
+[tasks.pack]
+description = "Pack the store into the bundle devices download: <out>"
+run = "bash scripts/pack-store.sh"
+
+[tasks.publish]
+description = "Publish this commit's store to every registry, signed, and move the channels, or push a PR's test store. Env: STORE_REPOSITORIES (pushed to the first, copied to the rest), COSIGN_KEY (sign with a key and no transparency log; keyless without it): commit|pr <number>"
+run = "bash scripts/publish-store.sh"
+
+[tasks.check-images]
+description = "Check every image of every published release resolves and has each VOLUME mounted (needs docker, reads registries)"
+run = "bash scripts/check-images.sh"
 
 [tasks.lint]
 description = "Lint the tooling (shfmt format check + shellcheck)"
