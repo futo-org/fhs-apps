@@ -354,13 +354,13 @@ run "$store/scripts/validate-store.sh"
 assert_problem "fails when the settings check can't run on enum options [1]" "$output" \
   whoami/latest/settings.json "couldn't be checked"
 
-second_app() {
+add_second_app() {
   cp -a "$1/whoami" "$1/second"
   edit_json "$1/second/manifest.json" '.appId = "second"'
   edit_json "$1/catalog.json" '.apps += [{id: "second", name: "Second"}]'
 }
 
-host_network() {
+use_host_network() {
   sed -i 's#^    ports:$#    network_mode: host#; /"8080:80"/d' "$1/docker-compose.yml"
 }
 
@@ -369,7 +369,7 @@ rendered_problems() {
 }
 
 store=$(released_store)
-second_app "$store"
+add_second_app "$store"
 assert_problem "rejects two apps that publish the same host port" "$(rendered_problems "$store")" \
   whoami "host port 8080/tcp is also published by second"
 
@@ -380,15 +380,15 @@ assert_rendered_problem "rejects an appPort published only over udp" "appPort 80
   "sed -i 's#\"8080:80\"#\"8080:80/udp\"#' $compose"
 
 store=$(released_store)
-host_network "$store/whoami/latest"
+use_host_network "$store/whoami/latest"
 release "$store"
 run "$store/scripts/validate-store.sh"
 assert_equal "accepts a host network app, its appPort taken as published" "$status" 0
 
 store=$(released_store)
-second_app "$store"
+add_second_app "$store"
 for dir in latest releases/1; do
-  host_network "$store/second/$dir"
+  use_host_network "$store/second/$dir"
 done
 assert_problem "rejects an app that publishes a host network app's appPort" "$(rendered_problems "$store")" \
   whoami "host port 8080/tcp is also published by second"
