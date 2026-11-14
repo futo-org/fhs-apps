@@ -338,6 +338,11 @@ BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
 assert_equal "keeps no history against a base from before the store format" "$(problems "$store" "$base")" ""
 
 store=$(released_store)
+edit_json "$store/whoami/manifest.json" '.releases[0].appVersion = "v9.9.9"'
+assert_problem "rejects a manifest appVersion that differs from its release.json" "$(problems "$store")" \
+  whoami/manifest.json 'release 1 appVersion "v9.9.9" differs from whoami/releases/1/release.json ("v1.10.1")'
+
+store=$(released_store)
 for dir in latest releases/1; do
   edit_json "$store/whoami/$dir/settings.json" '.fields[1].options = [1]'
 done

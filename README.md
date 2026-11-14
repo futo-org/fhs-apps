@@ -28,7 +28,8 @@ scripts/                  # bash tooling, run with `mise run <task>`
   that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
   master's side and run it again.
 * `version` is the release number (1, 2, 3, ...); updates follow it. `appVersion` is the
-  upstream version, shown to users only.
+  upstream version, shown to users only; a manifest entry's must match its release's
+  `release.json`.
 * `canSkip: false` makes the release a required stop: every update lands on it and passes
   its health check before going further. Once merged, the only allowed change is
   `canSkip` from `false` to `true` in `manifest.json`.

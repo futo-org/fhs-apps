@@ -104,6 +104,8 @@ validate_manifest() {
       || fail "$app/manifest.json: release $version needs a boolean canSkip"
     if [[ -d "$app/releases/$version" ]]; then
       validate_release_folder "$app" "$app/releases/$version"
+      [[ ! -f "$app/releases/$version/release.json" ]] \
+        || report_problems "$app/manifest.json" app_version_mismatch "$entry" "$app/releases/$version/release.json"
       ((version == 1)) || validate_kept_paths "$app/releases/$((version - 1))" "$app/releases/$version" "$((version - 1))"
     else
       fail "$app/releases/$version: missing"
@@ -129,6 +131,13 @@ validate_manifest() {
   if ((count == 0)) || ! diff -r -q "$app/latest" "$app/releases/$count" > /dev/null 2>&1; then
     fail "$app/latest: not released: run \`mise run release $app\`"
   fi
+}
+
+app_version_mismatch() {
+  jq -rn --argjson entry "$1" --arg path "$2" --rawfile release "$2" '
+    ($release | fromjson? // null) as $release |
+    if ($release | type) != "object" or $release.appVersion == $entry.appVersion then empty
+    else "release \($entry.version) appVersion \($entry.appVersion | tojson) differs from \($path) (\($release.appVersion | tojson))" end'
 }
 
 validate_release_folder() {
