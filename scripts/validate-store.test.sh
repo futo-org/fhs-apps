@@ -376,6 +376,9 @@ assert_problem "rejects two apps that publish the same host port" "$(rendered_pr
 assert_rendered_problem "rejects a compose that doesn't publish appPort" "appPort 9090 isn't published" \
   "edit_json whoami/manifest.json '.appPort = 9090'"
 
+assert_rendered_problem "rejects an appPort published only over udp" "appPort 8080 isn't published" \
+  "sed -i 's#\"8080:80\"#\"8080:80/udp\"#' $compose"
+
 store=$(released_store)
 host_network "$store/whoami/latest"
 release "$store"

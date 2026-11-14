@@ -295,7 +295,7 @@ published_ports='def published_ports: .published // empty | tostring | split("-"
 
 compose_problems() {
   jq -r --arg values "$2" --argjson port "$3" "$published_ports"'
-    (if any(.services[]; .network_mode == "host") or any(.services[].ports[]? | published_ports; . == $port) then empty
+    (if any(.services[]; .network_mode == "host") or any(.services[].ports[]? | select((.protocol // "tcp") == "tcp") | published_ports; . == $port) then empty
       else "appPort \($port) isn'"'"'t published" end),
     (.services | to_entries[] | .key as $service | .value |
       (if (.restart // "" | IN("always", "unless-stopped")) | not then "\($service): needs restart: always or unless-stopped" else empty end),

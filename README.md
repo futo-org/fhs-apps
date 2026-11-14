@@ -79,7 +79,7 @@ renaming one would move users' data back to app data on update, so CI rejects it
   an anonymous volume that the snapshot misses and every `down` leaves behind. `ci-run`
   fails on one.
 * Every service sets `restart: always` or `restart: unless-stopped`.
-* The stock compose publishes the app's `appPort`, and no two apps publish the same host
+* The stock compose publishes the app's `appPort` over tcp, and no two apps publish the same host
   port. An app on `network_mode: host` is taken to use its `appPort`; other ports it
   opens aren't checked.
 * `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run, as
