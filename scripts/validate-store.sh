@@ -288,6 +288,7 @@ published_ports='def published_ports: .published // empty | tostring | split("-"
 
 compose_problems() {
   jq -r --arg values "$2" --argjson port "$3" "$published_ports"'
+    def covers($other): . == "" or . == $other or (. == "0.0.0.0" and ($other | test(":") | not)) or (. == "::" and ($other | test(":")));
     (if any(.services[]; .network_mode == "host") or any(.services[].ports[]? | select((.protocol // "tcp") == "tcp") | published_ports; . == $port) then empty
       else "appPort \($port) isn'"'"'t published" end),
     ([.services | to_entries[] | .key as $service | .value |
@@ -295,7 +296,7 @@ compose_problems() {
       else .ports[]? | {service: $service, protocol: (.protocol // "tcp"), ip: (.host_ip // ""), port: published_ports} end]
       | group_by([.port, .protocol])[] | . as $entries
       | [range(length) as $i | range($i + 1; length) as $j | [$entries[$i], $entries[$j]]
-        | select(any(.[].ip; IN("", "0.0.0.0", "::")) or .[0].ip == .[1].ip)]
+        | select(.[0].ip as $a | .[1].ip as $b | ($a | covers($b)) or ($b | covers($a)))]
       | select(length > 0)
       | "host port \(.[0][0].port)/\(.[0][0].protocol) is published twice, by \([.[][].service] | unique | join(" and "))"),
     (.services | to_entries[] | .key as $service | .value |

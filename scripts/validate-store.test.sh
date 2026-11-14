@@ -424,8 +424,11 @@ assert_rendered_problem "rejects a port range overlapping another service's host
   "host port 8080/tcp is published twice, by sidecar and whoami" "with_sidecar gpu sidecar 8079-8081:80-82"
 assert_rendered_problem "rejects a host port on one address when another service takes every address" \
   "host port 8080/tcp is published twice, by sidecar and whoami" "with_sidecar gpu sidecar 127.0.0.1:8080:80"
+assert_rendered_problem "rejects a host port on an IPv6 address when another service takes every IPv6 address" \
+  "host port 8090/tcp is published twice, by first and second" "with_sidecar gpu first [::]:8090:80 && with_sidecar gpu second [::1]:8090:80"
 accepted_ports "the same host port over another protocol" "with_sidecar gpu sidecar 8080:80/udp"
 accepted_ports "one host port on two addresses" "with_sidecar gpu first 127.0.0.1:8090:80" "with_sidecar gpu second 192.168.1.5:8090:80"
+accepted_ports "one host port on every IPv4 address and an IPv6 address" "with_sidecar gpu first 0.0.0.0:8090:80" "with_sidecar gpu second [::1]:8090:80"
 accepted_ports "one host port in two options that never run together" "with_sidecar plain first 8090:80" "with_sidecar gpu second 8090:80"
 
 store=$(released_store)
