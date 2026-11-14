@@ -14,6 +14,9 @@ command -v jq > /dev/null || {
   exit 2
 }
 
+ports_dir=$(mktemp -d)
+trap 'rm -rf "$ports_dir"' EXIT
+
 report_problems() {
   local at=$1 found problem
   shift
@@ -287,8 +290,13 @@ validate_fragments() {
   if grep -qE '\$\{[A-Z_]+:-' "$1"; then fail "$1: unresolved upstream variable"; fi
 }
 
+published_ports='def published_ports: .published // empty | tostring | split("-") | map(tonumber)
+  | if length == 2 then range(.[0]; .[1] + 1) else .[0] end;'
+
 compose_problems() {
-  jq -r --arg values "$2" '
+  jq -r --arg values "$2" --argjson port "$3" "$published_ports"'
+    (if any(.services[]; .network_mode == "host") or any(.services[].ports[]? | published_ports; . == $port) then empty
+      else "appPort \($port) isn'"'"'t published" end),
     (.services | to_entries[] | .key as $service | .value |
       (if (.restart // "" | IN("always", "unless-stopped")) | not then "\($service): needs restart: always or unless-stopped" else empty end),
       (if has("container_name") then "\($service): container_name is not allowed, container names are global on the host" else empty end),
@@ -304,6 +312,11 @@ compose_problems() {
     | "\(.)\t\($values)"' <<< "$1"
 }
 
+host_ports() {
+  jq -r --argjson port "$2" "$published_ports"'
+    .services[] | if .network_mode == "host" then "\($port)/tcp" else (.ports[]? | "\(published_ports)/\(.protocol // "tcp")") end' <<< "$1"
+}
+
 value_combinations() {
   jq -c '
     def choices:
@@ -317,12 +330,12 @@ value_combinations() {
 }
 
 render_combinations() {
-  local app=$1 dir=$2 combinations values rendered work found problem
+  local app=$1 dir=$2 app_port combinations values rendered work found ports problem
   command -v docker > /dev/null || {
     fail "docker is required to render (set SKIP_RENDER=1 to skip)"
     return
   }
-  if ! combinations=$(value_combinations "$dir/settings.json"); then
+  if ! app_port=$(jq .appPort "$app/manifest.json") || ! combinations=$(value_combinations "$dir/settings.json"); then
     fail "$dir: couldn't list the settings combinations to render"
     return
   fi
@@ -337,11 +350,12 @@ render_combinations() {
       fail "$dir: render failed for $values: $(< "$work/err")"
       continue
     fi
-    if ! found=$(compose_problems "$rendered" "$values"); then
+    if ! found=$(compose_problems "$rendered" "$values" "$app_port") || ! ports=$(host_ports "$rendered" "$app_port"); then
       fail "$dir: couldn't check the render for $values"
       continue
     fi
     printf '%s\n' "$found" >> "$work/problems"
+    printf '%s\n' "$ports" >> "$ports_dir/$app"
     printf '%s' "$rendered" > "$work/rendered.json"
     docker compose -f "$work/rendered.json" config -q 2> "$work/err" \
       || fail "$dir: the rendered compose doesn't load for $values: $(< "$work/err")"
@@ -354,6 +368,24 @@ render_combinations() {
     fail "$dir: couldn't sort the render problems"
   fi
   rm -rf "$work"
+}
+
+validate_ports() {
+  local app port first
+  local -A taken=() reported=()
+  for app in $(app_ids); do
+    [[ -f "$ports_dir/$app" ]] || continue
+    while IFS= read -r port; do
+      [[ -n "$port" ]] || continue
+      first=${taken[$port]:-}
+      if [[ -z "$first" ]]; then
+        taken[$port]=$app
+      elif [[ "$first" != "$app" && -z "${reported["$app $port"]:-}" ]]; then
+        reported["$app $port"]=1
+        fail "$app: host port $port is also published by $first"
+      fi
+    done < "$ports_dir/$app"
+  done
 }
 
 history_problems() {
@@ -416,6 +448,7 @@ for app in $(app_ids); do
   validate_manifest "$app"
   validate_history "$app"
 done
+validate_ports
 
 if ((failed)); then
   echo "store validation failed" >&2

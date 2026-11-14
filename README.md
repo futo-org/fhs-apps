@@ -79,6 +79,9 @@ renaming one would move users' data back to app data on update, so CI rejects it
   an anonymous volume that the snapshot misses and every `down` leaves behind. `ci-run`
   fails on one.
 * Every service sets `restart: always` or `restart: unless-stopped`.
+* The stock compose publishes the app's `appPort`, and no two apps publish the same host
+  port. An app on `network_mode: host` is taken to use its `appPort`; other ports it
+  opens aren't checked.
 * `health-check.sh` runs as `bash -euo pipefail` from the release folder, 5 s per run, as
   root, with only `PATH=/usr/bin:/usr/sbin`, `HOME`, `LANG=C.UTF-8`, `APP_ID`,
   `APP_DATA_DIR` and `APP_TZ` set: no secrets, no setting values. It can use bash,
@@ -107,7 +110,7 @@ scripts/
 ```
 
 * `mise run validate`: strict checks and a render of every settings combination (needs
-  docker; `SKIP_RENDER=1` skips renders and the compose rules checked on them,
+  docker; `SKIP_RENDER=1` skips renders and the compose and port rules checked on them,
   `BASE_REF=<ref>` checks published history).
 * `mise run generate-compose <release-dir> <app-id> [user_settings.json]`: the compose a
   device would run, on stdout. Needs `APP_DATA_DIR`, `APP_SEED`, `APP_PASSWORD` and
