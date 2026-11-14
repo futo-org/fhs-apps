@@ -22,8 +22,20 @@ committed_store() {
   echo "$store"
 }
 
+failure_output() {
+  local output
+  if output=$({ "$@" > /dev/null; } 2>&1); then
+    return
+  fi
+  printf '%s\n' "$output"
+}
+
 problems() {
-  { SKIP_RENDER=1 BASE_REF="${2:-}" "$1/scripts/validate-store.sh" > /dev/null; } 2>&1 || true
+  failure_output env SKIP_RENDER=1 BASE_REF="${2:-}" "$1/scripts/validate-store.sh"
+}
+
+rendered_problems() {
+  failure_output "$1/scripts/validate-store.sh"
 }
 
 store=$(released_store)
@@ -182,7 +194,7 @@ assert_rendered_problem() {
   local case=$1 says=$2 edit=$3 store
   store=$(released_store)
   (cd "$store" && eval "$edit")
-  assert_problem "$case" "$({ "$store/scripts/validate-store.sh" > /dev/null; } 2>&1 || true)" whoami/latest "$says"
+  assert_problem "$case" "$(rendered_problems "$store")" whoami/latest "$says"
 }
 
 # shellcheck disable=SC2016 # edits run in the store, compose syntax kept literal
@@ -362,10 +374,6 @@ add_second_app() {
 
 use_host_network() {
   sed -i 's#^    ports:$#    network_mode: host#; /"8080:80"/d' "$1/docker-compose.yml"
-}
-
-rendered_problems() {
-  { "$1/scripts/validate-store.sh" > /dev/null; } 2>&1 || true
 }
 
 store=$(released_store)
