@@ -116,6 +116,9 @@ start
 compose_ps_status=0
 assert_equal "fails before the health gate when the containers can't be listed" "$status $checked" "1 unchecked"
 
+start 'not json'
+assert_equal "fails before the health gate when the container list isn't json" "$status $checked" "1 unchecked"
+
 seed=$(mktemp -d "$test_root/seed.XXXXXX")
 mkdir -p "$seed/release/data/postgres" "$seed/release/data/config"
 touch "$seed/release/data/postgres/.gitkeep" "$seed/release/data/config/app.conf"
