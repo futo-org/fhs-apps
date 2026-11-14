@@ -17,7 +17,7 @@ for app in Jellyfin -jelly jelly_fin ''; do
     "1 app id must be lowercase letters, digits and dashes"
 done
 
-for port in 0 65536 80.5; do
+for port in 0 65536 80.5 0100000 08080; do
   run "$store/scripts/new-app.sh" plex "$port"
   assert_equal "rejects the port $port" "$status $output" "1 app port must be 1-65535"
 done

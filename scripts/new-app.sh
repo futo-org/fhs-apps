@@ -15,7 +15,7 @@ port=$2
   echo "app id must be lowercase letters, digits and dashes" >&2
   exit 1
 }
-if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+if ! [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] || ((port > 65535)); then
   echo "app port must be 1-65535" >&2
   exit 1
 fi
