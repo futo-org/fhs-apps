@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=settings-combinations.sh
+source "$(dirname "$0")/settings-combinations.sh"
 cd "$(dirname "$0")/.."
 
 failed=0
@@ -29,13 +31,6 @@ look_up() {
   volumes[$image]=$(jq -c '.config.Volumes // {} | keys | map(rtrimstr("/"))' <<< "$config")
 }
 
-render_values() {
-  jq -c '{}, (.fields[] | {(.key): (
-    if .type == "enum" then .options[].value
-    elif .type == "bool" then true, false
-    else "/var/mnt/external/check/\(.key)" end)})' "$1" | awk '!seen[$0]++'
-}
-
 check_render() {
   local at=$1 values=$2 rendered=$3 services service image unmounted volume
   services=$(jq -r '.services | to_entries[] | [.key, .value.image] | @tsv' <<< "$rendered")
@@ -55,7 +50,7 @@ check_render() {
 
 check_release() {
   local app=$1 version=$2 dir="$1/releases/$2" renders values rendered
-  if ! renders=$(render_values "$dir/settings.json" 2> "$work/err"); then
+  if ! renders=$(value_combinations "$dir/settings.json" 2> "$work/err"); then
     report "$app release $version: settings.json can't be read" "{}" "$(< "$work/err")"
     return
   fi

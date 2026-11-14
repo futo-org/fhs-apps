@@ -65,7 +65,7 @@ assert_problem "names the app, the release and the image that doesn't resolve" "
 assert_equal "reports only the release whose image is missing" "$(grep -c '^error:' <<< "$output")" 1
 edit_json "$FAKE_IMAGES" '.["docker.io/traefik/whoami:v1.11.0"] = {"digest": "sha256:1110", "volumes": []}'
 
-for setting in "MODE|.compose.gpu|{\"MODE\":\"gpu\"}" "EXPORT_DIR|.compose|{\"EXPORT_DIR\":\"/var/mnt/external/check/EXPORT_DIR\"}"; do
+for setting in "MODE|.compose.gpu|{\"MODE\":\"gpu\",\"VERBOSE\":true}" "EXPORT_DIR|.compose|{\"EXPORT_DIR\":\"/var/mnt/external/EXPORT_DIR\",\"MODE\":\"plain\",\"VERBOSE\":true}"; do
   IFS='|' read -r key fragment values <<< "$setting"
   edit_json "$store/whoami/releases/2/settings.json" \
     "(.fields[] | select(.key == \"$key\") | $fragment.services.whoami.image) = \"docker.io/traefik/whoami:v1.11.0-$key\""
@@ -75,11 +75,23 @@ for setting in "MODE|.compose.gpu|{\"MODE\":\"gpu\"}" "EXPORT_DIR|.compose|{\"EX
   git -C "$store" checkout -q -- whoami
 done
 
+edit_json "$store/whoami/releases/2/settings.json" '.fields += [
+  {key: "FLAVOR", type: "enum", label: "Flavor", default: "a", options: [{value: "a", label: "A"}, {value: "b", label: "B"}]},
+  {key: "BACKEND", type: "enum", label: "Backend", default: "x", options: [{value: "x", label: "X"}, {value: "y", label: "Y"}]}]'
+# shellcheck disable=SC2016
+whoami_image 2 'docker.io/traefik/whoami:${FLAVOR}-${BACKEND}'
+edit_json "$FAKE_IMAGES" '. + ({"a-x": 1, "b-x": 2, "a-y": 3} | with_entries({key: "docker.io/traefik/whoami:\(.key)", value: {digest: "sha256:\(.value)", volumes: []}}))'
+run "$store/scripts/check-images.sh"
+assert_problem "checks the image two settings choose together" "$output" "whoami release 2" \
+  'docker.io/traefik/whoami:b-y doesn'"'"'t resolve (with {"MODE":"plain","VERBOSE":true,"FLAVOR":"b","BACKEND":"y"})'
+assert_equal "reports only the image no single setting reaches" "$(grep -c '^error:' <<< "$output")" 1
+git -C "$store" checkout -q -- whoami
+
 edit_json "$FAKE_IMAGES" '.["docker.io/traefik/whoami:v1.10.1"].volumes += ["/data"]'
 run "$store/scripts/check-images.sh"
 assert_equal "fails when an image declares a VOLUME the service doesn't mount" "$status" 1
 assert_problem "names the app, the release, the image and the VOLUME left unmounted" "$output" "whoami release 1" \
-  "docker.io/traefik/whoami:v1.10.1 declares VOLUME /data, which service whoami doesn't mount (with {})"
+  "docker.io/traefik/whoami:v1.10.1 declares VOLUME /data, which service whoami doesn't mount (with {\"MODE\":\"plain\",\"VERBOSE\":true})"
 assert_equal "reports an unmounted VOLUME once per release" "$(grep -c '^error:' <<< "$output")" 1
 
 sed -i '/restart: unless-stopped/a\    tmpfs:\n      - /data:size=64m,mode=1777' "$store/whoami/releases/1/docker-compose.yml"
@@ -91,13 +103,13 @@ edit_json "$FAKE_IMAGES" '.["docker.io/traefik/whoami:v1.10.1"].volumes -= ["/da
 edit_json "$FAKE_IMAGES" '.["docker.io/traefik/whoami:v1.11.0"].platforms = ["linux/arm64"]'
 run "$store/scripts/check-images.sh"
 assert_problem "fails naming an image that resolves but has no linux/amd64 build" "$output" "whoami release 2" \
-  "docker.io/traefik/whoami:v1.11.0 doesn't resolve (with {}): Error: no child with platform linux/amd64"
+  "docker.io/traefik/whoami:v1.11.0 doesn't resolve (with {\"MODE\":\"plain\",\"VERBOSE\":true}): Error: no child with platform linux/amd64"
 edit_json "$FAKE_IMAGES" 'del(.["docker.io/traefik/whoami:v1.11.0"].platforms)'
 
 echo 'services: [' > "$store/whoami/releases/2/docker-compose.yml"
 run "$store/scripts/check-images.sh"
 assert_equal "fails when a release doesn't render" "$status" 1
-assert_problem "names the release that doesn't render" "$output" "whoami release 2" "doesn't render (with {})"
+assert_problem "names the release that doesn't render" "$output" "whoami release 2" "doesn't render (with {\"MODE\":\"plain\",\"VERBOSE\":true})"
 git -C "$store" checkout -q -- whoami
 
 echo '{' > "$store/whoami/releases/2/settings.json"
