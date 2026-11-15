@@ -1,0 +1,17 @@
+# Upstream's compose (jellyfin.org/docs/general/installation/container). No
+# `user:`, so Jellyfin runs as root like upstream's default and reads /dev/dri
+# without group_add. No container_name: names are global on the host.
+name: jellyfin
+
+services:
+  jellyfin:
+    image: docker.io/jellyfin/jellyfin:12.2.20261005-225228
+    ports:
+      - "8096:8096/tcp"
+      # Client discovery; replies carry the container address unless
+      # JELLYFIN_PublishedServerUrl is set.
+      - "7359:7359/udp"
+    volumes:
+      - ${APP_DATA_DIR}/config:/config
+      - ${APP_DATA_DIR}/cache:/cache
+    restart: unless-stopped

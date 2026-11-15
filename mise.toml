@@ -1,0 +1,38 @@
+[tools]
+"aqua:koalaman/shellcheck" = "0.11.0"
+"aqua:mvdan/sh" = "3.13.1"
+
+[settings]
+pin = true
+
+[tasks.validate]
+description = "Validate the store. Env: BASE_REF checks published history, SKIP_RENDER=1 skips renders"
+run = "bash scripts/validate-store.sh"
+
+[tasks.generate-compose]
+description = "Print the compose a device would run: <release-dir> <app-id> [user_settings.json]"
+run = "bash scripts/generate-compose.sh"
+
+[tasks.new-app]
+description = "Start an app from _template/: <app-id> <app-port>"
+run = "bash scripts/new-app.sh"
+
+[tasks.release]
+description = "Freeze <app>/latest/ into its next release, in the PR. Env: BASE_REF (default origin/master): <app-id>"
+run = "bash scripts/release.sh"
+
+[tasks.ci-run]
+description = "Run an app like a device, pulls images: install|update <app-id>"
+run = "bash scripts/ci-run.sh"
+
+[tasks.lint]
+description = "Lint the tooling (shfmt format check + shellcheck)"
+run = ["shfmt -d scripts", "shellcheck -x -P SCRIPTDIR scripts/*.sh"]
+
+[tasks.lint-fix]
+description = "Format the tooling with shfmt"
+run = "shfmt -w scripts"
+
+[tasks.test]
+description = "Run the tooling's tests (need docker)"
+run = 'status=0; for test in scripts/*.test.sh; do bash "$test" || status=1; done; exit $status'

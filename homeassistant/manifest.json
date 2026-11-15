@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "appId": "homeassistant",
+  "appPort": 8123,
+  "releases": [
+    {
+      "version": 1,
+      "appVersion": "2026.10.1",
+      "canSkip": true
+    }
+  ]
+}
