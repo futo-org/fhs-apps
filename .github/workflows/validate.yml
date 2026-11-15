@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PINNED_COMPOSE_VERSION: 5.7.1
-  PINNED_COMPOSE_SHA256: af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -19,15 +15,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
-      - name: Pin docker compose ${{ env.PINNED_COMPOSE_VERSION }}, the OS image's
-        run: |
-          mkdir -p ~/.docker/cli-plugins
-          curl -fsSL -o ~/.docker/cli-plugins/docker-compose \
-            "https://github.com/docker/compose/releases/download/v$PINNED_COMPOSE_VERSION/docker-compose-linux-x86_64"
-          echo "$PINNED_COMPOSE_SHA256  $HOME/.docker/cli-plugins/docker-compose" | sha256sum -c
-          chmod +x ~/.docker/cli-plugins/docker-compose
-          docker compose version
+      - uses: ./.github/actions/compose
       - run: mise run lint
       - run: mise run test
       - name: Validate manifests, release folders, history and renders
@@ -44,20 +34,36 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
-      - name: Pin docker compose ${{ env.PINNED_COMPOSE_VERSION }}, the OS image's
-        run: |
-          mkdir -p ~/.docker/cli-plugins
-          curl -fsSL -o ~/.docker/cli-plugins/docker-compose \
-            "https://github.com/docker/compose/releases/download/v$PINNED_COMPOSE_VERSION/docker-compose-linux-x86_64"
-          echo "$PINNED_COMPOSE_SHA256  $HOME/.docker/cli-plugins/docker-compose" | sha256sum -c
-          chmod +x ~/.docker/cli-plugins/docker-compose
-          docker compose version
+      - uses: ./.github/actions/compose
       - name: Install and update changed apps
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
         run: |
-          apps=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*/latest/**' ':(exclude)_*' | cut -d/ -f1 | sort -u)
+          apps=$(git diff --name-only "$BASE_REF...HEAD" -- '*/latest/**' ':(exclude)_*' | cut -d/ -f1 | sort -u)
           for app in $apps; do
             mise run ci-run install "$app"
             mise run ci-run update "$app"
             docker image prune -af > /dev/null
           done
+
+  publish:
+    if: github.event_name == 'push'
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/publish.yml
+    secrets:
+      OCI_FUTO_ORG_USERNAME: ${{ secrets.OCI_FUTO_ORG_USERNAME }}
+      OCI_FUTO_ORG_TOKEN: ${{ secrets.OCI_FUTO_ORG_TOKEN }}
+
+  test-store:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish.yml

@@ -118,7 +118,7 @@ new_store() {
   local store
   store=$(mktemp -d "$test_root/store.XXXXXX")
   mkdir -p "$store/scripts"
-  cp "$scripts_dir"/{validate-store,generate-compose,release,new-app}.sh "$store/scripts/"
+  cp "$scripts_dir"/{validate-store,settings-combinations,generate-compose,release,new-app,pack-store,publish-store,check-images}.sh "$store/scripts/"
   cp -a "$scripts_dir/../_template" "$store/_template"
   echo '{"schemaVersion": 1, "apps": [{"id": "whoami", "name": "Whoami"}]}' > "$store/catalog.json"
   mkdir -p "$store/whoami"

@@ -106,15 +106,16 @@ renaming one would move users' data back to app data on update, so CI rejects it
 
 ## Tooling
 
-mise pins shellcheck and shfmt (`mise install`) and runs every command. The scripts are bash and need
+mise pins shellcheck, shfmt, oras, cosign and crane (`mise install`) and runs every command. The scripts are bash and need
 jq and docker on the host, like the device. `scripts/generate-compose.sh` is the only renderer: the
 agent runs it on the device, CI runs it here. CI pins docker compose to the version the OS
 image ships, since the merge rules are compose's.
 
 ```
 scripts/
-  validate-store.sh, generate-compose.sh, new-app.sh, release.sh, ci-run.sh   commands
-  *.test.sh                                                        their tests
+  validate-store.sh, generate-compose.sh, new-app.sh, release.sh, ci-run.sh,
+  pack-store.sh, publish-store.sh, check-images.sh                            commands
+  *.test.sh                                                                   their tests
 ```
 
 * `mise run validate`: strict checks and a render of every settings combination (needs
@@ -127,5 +128,18 @@ scripts/
 * `mise run ci-run install|update <app-id>`: runs the app like a device (pulls images).
 * `mise run release <app-id>`: freezes `latest/` into the PR's release (`BASE_REF`,
   default `origin/master`, is the branch the PR merges into).
+* `mise run pack <out>`: the store bundle devices download, the same bytes for the same store.
+  Fails over the agent's limits: 1 MiB packed, 64 MiB unpacked.
+* `mise run publish commit`: what CI runs on `master` once `validate` passes. Pushes
+  `store:<commit>` to ghcr, signs it, copies it and its signature to oci.futo.org, then moves
+  `nightly` and `alpha` on each, only forward. Its revision is the last commit on `master`'s
+  first parent line that changed the store or how it's packed, so the same store always gets
+  the same digest, and a channel moves only when
+  the commit it points at is an ancestor of that one. `mise run publish pr <number>` pushes a
+  PR's unsigned `store:pr-<number>` to ghcr. `STORE_REPOSITORIES` points it at other
+  registries, `COSIGN_KEY` signs with a key instead of CI's keyless identity.
+* `mise run check-images`: what CI runs every night. Every image of every published release,
+  rendered with the defaults, each enum and bool choice and each folder set, must resolve and
+  mount each `VOLUME` it declares.
 * `mise run test`: the tooling's tests (need docker).
 * `mise run lint`: shfmt format check and shellcheck (`lint-fix` formats).

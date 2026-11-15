@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=settings-combinations.sh
+source "$(dirname "$0")/settings-combinations.sh"
 cd "$(dirname "$0")/.."
 
 failed=0
@@ -318,18 +320,6 @@ compose_problems() {
 host_ports() {
   jq -r --argjson port "$2" "$published_ports"'
     .services[] | if .network_mode == "host" then "\($port)/tcp" else (.ports[]? | "\(published_ports)/\(.protocol // "tcp")") end' <<< "$1"
-}
-
-value_combinations() {
-  jq -c '
-    def choices:
-      if .type == "enum" then [.options[].value]
-      elif .type == "bool" then [true, false]
-      elif .type == "path" then [null, "/var/mnt/external/validate/\(.key)"]
-      else [null] end;
-    reduce .fields[] as $f ([{}];
-      [.[] as $acc | ($f | choices)[] as $c | $acc + (if $c == null then {} else {($f.key): $c} end)])
-    | .[]' "$1"
 }
 
 render_combinations() {
