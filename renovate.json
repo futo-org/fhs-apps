@@ -1,0 +1,66 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["docker-compose"],
+  "includePaths": ["*/latest/docker-compose.yml"],
+  "ignorePaths": ["_template/**"],
+  "labels": ["renovate"],
+  "pinDigests": false,
+  "minimumReleaseAge": null,
+  "schedule": ["at any time"],
+  "separateMajorMinor": false,
+  "prBodyNotes": [
+    "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, set `appVersion` and `canSkip`, then run `mise run release <app>`."
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["docker-compose"],
+      "enabled": false
+    },
+    {
+      "matchFileNames": ["homeassistant/latest/docker-compose.yml"],
+      "matchPackageNames": ["ghcr.io/home-assistant/home-assistant"],
+      "enabled": true,
+      "groupName": "homeassistant"
+    },
+    {
+      "matchFileNames": ["immich/latest/docker-compose.yml"],
+      "matchPackageNames": ["ghcr.io/immich-app/immich-server", "ghcr.io/immich-app/immich-machine-learning"],
+      "enabled": true,
+      "groupName": "immich"
+    },
+    {
+      "matchFileNames": ["jellyfin/latest/docker-compose.yml"],
+      "matchPackageNames": ["docker.io/jellyfin/jellyfin"],
+      "enabled": true,
+      "groupName": "jellyfin",
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d{8})-(?<build>\\d{6})$"
+    },
+    {
+      "matchFileNames": ["nextcloud/latest/docker-compose.yml"],
+      "matchPackageNames": ["docker.io/library/nextcloud"],
+      "enabled": true,
+      "groupName": "nextcloud"
+    },
+    {
+      "matchFileNames": ["paperless-ngx/latest/docker-compose.yml"],
+      "matchPackageNames": ["ghcr.io/paperless-ngx/paperless-ngx"],
+      "enabled": true,
+      "groupName": "paperless-ngx"
+    },
+    {
+      "matchFileNames": ["vaultwarden/latest/docker-compose.yml"],
+      "matchPackageNames": ["docker.io/vaultwarden/server"],
+      "enabled": true,
+      "groupName": "vaultwarden"
+    },
+    {
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "enabled": false
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"]
+    }
+  ]
+}
