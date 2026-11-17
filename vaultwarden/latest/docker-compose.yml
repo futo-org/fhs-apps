@@ -2,7 +2,7 @@ name: vaultwarden
 
 services:
   vaultwarden:
-    image: docker.io/vaultwarden/server:1.37.4
+    image: docker.io/vaultwarden/server:1.37.5
     environment:
       # DOMAIN is left unset: the platform has no variable for the device's URL.
       # Vaultwarden then guesses links from request headers; WebAuthn needs it.
