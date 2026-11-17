@@ -131,13 +131,17 @@ scripts/
 * `mise run pack <out>`: the store bundle devices download, the same bytes for the same store.
   Fails over the agent's limits: 1 MiB packed, 64 MiB unpacked.
 * `mise run publish commit`: what CI runs on `master` once `validate` passes. Pushes
-  `store:<commit>` to ghcr, signs it, copies it and its signature to oci.futo.org, then moves
-  `nightly` and `alpha` on each, only forward. Its revision is the last commit on `master`'s
+  `store:<commit>` to ghcr, signs it, and copies both to `oci.futo.org/futo-home/store`.
+  Then it moves `nightly` and `alpha` on each, only forward. Its revision is the last commit on `master`'s
   first parent line that changed the store or how it's packed, so the same store always gets
   the same digest, and a channel moves only when
   the commit it points at is an ancestor of that one. `mise run publish pr <number>` pushes a
   PR's unsigned `store:pr-<number>` to ghcr. `STORE_REPOSITORIES` points it at other
   registries, `COSIGN_KEY` signs with a key instead of CI's keyless identity.
+
+  In Harbor project `futo-home` (ID 13), create a project robot with Pull Repository and
+  Push Repository. Add its full username as `OCI_FUTO_ORG_USERNAME` and its secret as
+  `OCI_FUTO_ORG_TOKEN` in this repository's Actions secrets.
 * `mise run check-images`: what CI runs every night. Every image of every published release,
   rendered with the defaults, each enum and bool choice and each folder set, must resolve and
   mount each `VOLUME` it declares.

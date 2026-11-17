@@ -30,7 +30,7 @@ jobs:
           OCI_FUTO_ORG_TOKEN: ${{ secrets.OCI_FUTO_ORG_TOKEN }}
         run: |
           if [[ -z "$OCI_FUTO_ORG_USERNAME" || -z "$OCI_FUTO_ORG_TOKEN" ]]; then
-            echo "::error::the OCI_FUTO_ORG_USERNAME and OCI_FUTO_ORG_TOKEN secrets aren't set: add the oci.futo.org fhs-apps robot account to this repository's secrets"
+            echo "::error::the OCI_FUTO_ORG_USERNAME and OCI_FUTO_ORG_TOKEN secrets aren't set: add the oci.futo.org futo-home project robot credentials to this repository's secrets"
             exit 1
           fi
           echo "$GITHUB_TOKEN" | oras login ghcr.io -u USERNAME --password-stdin
