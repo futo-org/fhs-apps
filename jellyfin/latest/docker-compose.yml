@@ -5,7 +5,7 @@ name: jellyfin
 
 services:
   jellyfin:
-    image: docker.io/jellyfin/jellyfin:12.2.20261005-225228
+    image: docker.io/jellyfin/jellyfin:12.4.20261026-211555
     ports:
       - "8096:8096/tcp"
       # Client discovery; replies carry the container address unless
