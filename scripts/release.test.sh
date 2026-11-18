@@ -210,4 +210,58 @@ run env BASE_REF=HEAD "$store/scripts/release.sh" whoami < /dev/null
 assert_equal "refuses, without asking, when the next release folder already exists" "$status $output" \
   "1 whoami/releases/1: already exists"
 
+two_app_store() {
+  local store
+  store=$(new_store)
+  cp -a "$store/whoami" "$store/alpha"
+  edit_json "$store/alpha/manifest.json" '.appId = "alpha"'
+  release "$store" alpha
+  release "$store"
+  commit "$store" "release 1 of both"
+  echo "$store"
+}
+
+pick() {
+  run env BASE_REF=HEAD APP_VERSION=v1.11.0 CAN_SKIP=true "$1/scripts/release.sh" <<< "$2"
+}
+
+store=$(two_app_store)
+set_image "$store" v1.11.0
+pick "$store" ''
+assert_equal "lists the apps, without _template, and marks the one with unreleased changes" \
+  "$(shown $'1) alpha\n2) whoami  changed\n')" shown
+assert_equal "offers the only changed app, and Enter releases it" \
+  "$status $(shown 'app [whoami]: ') $(shown 'whoami: release 2 (v1.11.0)')" "0 shown shown"
+
+store=$(two_app_store)
+cp -a "$store/alpha" "$store/2"
+edit_json "$store/2/manifest.json" '.appId = "2"'
+commit "$store" "app 2"
+echo 'exit 0' > "$store/2/latest/health-check.sh"
+pick "$store" ''
+assert_equal "Enter takes the offered app even when its id is another row's number" \
+  "$status $(shown 'app [2]: ') $(shown '2: release 2 (v1.11.0)')" "0 shown shown"
+
+store=$(two_app_store)
+set_image "$store" v1.11.0
+pick "$store" 'whoami'
+assert_equal "picks an app by its id" "$status $(shown 'whoami: release 2 (v1.11.0)')" "0 shown"
+
+store=$(two_app_store)
+set_image "$store" v1.11.0
+echo 'exit 0' > "$store/alpha/latest/health-check.sh"
+pick "$store" $'\nnope\n../whoami\n3\n1'
+assert_equal "offers no app when several changed, asks again until a listed number or id, and picks by number" \
+  "$status $(grep -o 'app: ' <<< "$output" | wc -l) $(shown 'alpha: release 2 (v1.11.0)')" "0 5 shown"
+
+store=$(two_app_store)
+set_image "$store" v1.11.0
+run env BASE_REF=HEAD "$store/scripts/release.sh" < /dev/null
+assert_equal "fails with no input, asking for the app, and writes no release" \
+  "$status ${output##*$'\n'} $(jq '.releases | length' "$store/whoami/manifest.json")" \
+  "1 no app picked; run it in a terminal or pass one: mise run release <app-id> 1"
+
+run env BASE_REF=HEAD "$store/scripts/release.sh" whoami alpha
+assert_equal "refuses more than one app" "$status $output" "2 usage: $store/scripts/release.sh [app-id]"
+
 finish_tests

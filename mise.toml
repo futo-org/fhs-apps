@@ -21,7 +21,7 @@ description = "Start an app from _template/: <app-id> <app-port>"
 run = "bash scripts/new-app.sh"
 
 [tasks.release]
-description = "Freeze <app>/latest/ into its next release, in the PR; asks appVersion and canSkip. Env: BASE_REF (default origin/master), APP_VERSION and CAN_SKIP (true|false) answer without asking: <app-id>"
+description = "Freeze <app>/latest/ into its next release, in the PR; asks appVersion and canSkip. Env: BASE_REF (default origin/master), APP_VERSION and CAN_SKIP (true|false) answer without asking: [app-id], or pick from the list"
 run = "bash scripts/release.sh"
 raw = true
 
