@@ -54,7 +54,7 @@ signatures() {
 
 release_whoami() {
   write_release "$store/whoami/latest" "$1" true
-  BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+  release "$store"
   commit "$store" "$1"
 }
 

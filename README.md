@@ -22,10 +22,12 @@ scripts/                  # bash tooling, run with `mise run <task>`
 ## Releases
 
 * A PR that changes `<app>/latest/` also adds its release: run `mise run release <app>`,
-  which copies `latest/` to `releases/<n+1>/` and appends `{version, appVersion, canSkip}`
-  to the manifest. Run it again after every change; it rebuilds the PR's release, so a PR
-  adds exactly one. CI rejects a `latest/` that differs from the newest release, and a PR
-  that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
+  which asks `appVersion` (guessed from the changed image tag, Enter takes it) and
+  `canSkip`, writes them to `latest/release.json`, copies `latest/` to `releases/<n+1>/`
+  and appends `{version, appVersion, canSkip}` to the manifest. Without a terminal, set
+  `APP_VERSION` and `CAN_SKIP=true|false`. Run it again after every change; it rebuilds
+  the PR's release, so a PR adds exactly one. CI rejects a `latest/` that differs from the
+  newest release, and a PR that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
   master's side and run it again.
 * `version` is the release number (1, 2, 3, ...); updates follow it. `appVersion` is the
   upstream version, shown to users only; a manifest entry's must match its release's
