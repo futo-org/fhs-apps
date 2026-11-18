@@ -43,10 +43,10 @@ whoami_image() {
 }
 
 store=$(new_store)
-BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+release "$store"
 commit "$store" "release 1"
 write_release "$store/whoami/latest" v1.11.0 true
-BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+release "$store"
 whoami_image 2 docker.io/traefik/whoami:v1.11.0
 commit "$store" "release 2"
 

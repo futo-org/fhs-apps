@@ -9,7 +9,7 @@ entry_attributes() {
 }
 
 store=$(new_store)
-BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+release "$store"
 cp "$scripts_dir/pack-store.test.sh" "$store/scripts/"
 commit "$store" "release 1"
 

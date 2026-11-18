@@ -10,7 +10,7 @@
   "schedule": ["at any time"],
   "separateMajorMinor": false,
   "prBodyNotes": [
-    "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, set `appVersion` and `canSkip`, then run `mise run release <app>`."
+    "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, then run `mise run release <app>` and answer `appVersion` and `canSkip`."
   ],
   "packageRules": [
     {
