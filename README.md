@@ -27,9 +27,11 @@ scripts/                  # bash tooling, run with `mise run <task>`
   and appends `{version, appVersion, canSkip}` to the manifest. Without `<app>` it lists the
   apps, marks the ones with unreleased changes, and asks which one. Without a terminal, pass
   the app and both answers: `APP_VERSION=v1.2.3 CAN_SKIP=true mise run release <app>`. In
-  the PR, ticking `Release, can skip` or `Release, required stop` does the same in CI with
-  the guessed `appVersion` and pushes the release to the branch; with no guess it comments
-  to release locally. Run
+  a PR from a branch of this repo, ticking `Release, can skip` or `Release, required stop`
+  in the PR body does the same in CI with the guessed `appVersion` and pushes the release
+  to the branch; with no guess it comments to release locally. A box ticked when the PR is
+  opened does nothing, and a PR from a fork releases locally. CI releases the commit the box
+  was ticked on, so after a new push untick the box and tick it again. Run
   it again after every change; it rebuilds the PR's release, so a PR adds exactly one. CI
   rejects a `latest/` that differs from the newest release, and a PR that adds more than
   one release. On a conflict in `releases/` or `manifest.json`, take master's side and run

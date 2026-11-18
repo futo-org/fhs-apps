@@ -11,7 +11,7 @@
   "separateMajorMinor": false,
   "prBodyNotes": [
     "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, then tick one box below to release with the guessed `appVersion`, or run `mise run release <app>` and push.",
-    "- [ ] Release, can skip\n- [ ] Release, required stop"
+    "<!-- release -->\n- [ ] Release, can skip\n- [ ] Release, required stop\n<!-- /release -->"
   ],
   "packageRules": [
     {
