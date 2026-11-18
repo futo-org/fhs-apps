@@ -1,0 +1,93 @@
+name: Release from PR
+
+on:
+  pull_request:
+    types: [edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: release-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.changes.body &&
+      contains(github.event.pull_request.body, '[x] Release, ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/compose
+      - id: release
+        name: Release the changed app
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          BODY: ${{ github.event.pull_request.body }}
+          PREVIOUS_BODY: ${{ github.event.changes.body.from }}
+        run: |
+          status=0
+          result=$(bash scripts/release-pr.sh 2> "$RUNNER_TEMP/errors") || status=$?
+          if ((status != 0)); then
+            outcome=failed
+            message=$(cat "$RUNNER_TEMP/errors")
+          elif [[ $result == "no release box was just ticked" ]]; then
+            outcome=none
+            message=$result
+          elif [[ -z $(git status --porcelain) ]]; then
+            outcome=nothing
+            message=$result
+          else
+            outcome=released
+            message=$result
+          fi
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+          { echo "message<<MESSAGE_END"; echo "$message"; echo "MESSAGE_END"; } >> "$GITHUB_OUTPUT"
+          echo "$message"
+      - id: token
+        if: steps.release.outputs.outcome == 'released'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FHS_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FHS_CI_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - id: push
+        name: Commit and push the release as the app
+        if: steps.release.outputs.outcome == 'released'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          APP_SLUG: ${{ steps.token.outputs.app-slug }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MESSAGE: ${{ steps.release.outputs.message }}
+        run: |
+          bot="${APP_SLUG}[bot]"
+          bot_id=$(gh api "/users/$bot" --jq .id)
+          git add -A
+          git -c user.name="$bot" -c user.email="$bot_id+$bot@users.noreply.github.com" commit -qm "$MESSAGE"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraHeader="AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$HEAD_REF"
+      - name: Comment the result
+        if: always() && steps.release.outputs.outcome != 'none' && steps.release.outputs.outcome != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.release.outputs.outcome }}
+          PUSHED: ${{ steps.push.outcome }}
+          MESSAGE: ${{ steps.release.outputs.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "$OUTCOME/$PUSHED" in
+            released/success) body="Released: \`$MESSAGE\`" ;;
+            released/*) body="Released \`$MESSAGE\`, but the push failed. See [the run]($RUN_URL)." ;;
+            nothing/*) body="\`$MESSAGE\`" ;;
+            *) body="Release failed:"$'\n\n```\n'"$MESSAGE"$'\n```' ;;
+          esac
+          gh pr comment "$PR" --body "$body"

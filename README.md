@@ -26,7 +26,10 @@ scripts/                  # bash tooling, run with `mise run <task>`
   `canSkip`, writes them to `latest/release.json`, copies `latest/` to `releases/<n+1>/`
   and appends `{version, appVersion, canSkip}` to the manifest. Without `<app>` it lists the
   apps, marks the ones with unreleased changes, and asks which one. Without a terminal, pass
-  the app and both answers: `APP_VERSION=v1.2.3 CAN_SKIP=true mise run release <app>`. Run
+  the app and both answers: `APP_VERSION=v1.2.3 CAN_SKIP=true mise run release <app>`. In
+  the PR, ticking `Release, can skip` or `Release, required stop` does the same in CI with
+  the guessed `appVersion` and pushes the release to the branch; with no guess it comments
+  to release locally. Run
   it again after every change; it rebuilds the PR's release, so a PR adds exactly one. CI
   rejects a `latest/` that differs from the newest release, and a PR that adds more than
   one release. On a conflict in `releases/` or `manifest.json`, take master's side and run
@@ -117,7 +120,7 @@ image ships, since the merge rules are compose's.
 
 ```
 scripts/
-  validate-store.sh, generate-compose.sh, new-app.sh, release.sh, ci-run.sh,
+  validate-store.sh, generate-compose.sh, new-app.sh, release.sh, release-pr.sh, ci-run.sh,
   pack-store.sh, publish-store.sh, check-images.sh                            commands
   *.test.sh                                                                   their tests
 ```
@@ -147,6 +150,9 @@ scripts/
   In Harbor project `futo-home` (ID 13), create a project robot with Pull Repository and
   Push Repository. Add its full username as `OCI_FUTO_ORG_USERNAME` and its secret as
   `OCI_FUTO_ORG_TOKEN` in this repository's Actions secrets.
+* Release from PR (`.github/workflows/release.yml`): ticking a release box in a PR body runs
+  `scripts/release-pr.sh` on the branch and pushes the release as the org's `fhs-ci` app
+  (`FHS_CI_APP_CLIENT_ID` variable, `FHS_CI_APP_PRIVATE_KEY` secret), so `validate` runs on it.
 * `mise run check-images`: what CI runs every night. Every image of every published release,
   rendered with the defaults, each enum and bool choice and each folder set, must resolve and
   mount each `VOLUME` it declares.
