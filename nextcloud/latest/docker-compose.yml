@@ -42,7 +42,7 @@ services:
     restart: always
 
   app:
-    image: docker.io/library/nextcloud:34.0.4-apache
+    image: docker.io/library/nextcloud:35.0.3-apache
     restart: always
     ports:
       - "8081:80"
@@ -58,7 +58,7 @@ services:
         condition: service_started
 
   cron:
-    image: docker.io/library/nextcloud:34.0.4-apache
+    image: docker.io/library/nextcloud:35.0.3-apache
     restart: always
     entrypoint: /cron.sh
     init: true
