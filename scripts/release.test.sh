@@ -151,6 +151,60 @@ assert_equal "follows the app's image when its repository is replaced" \
   "$status $(shown 'whoami: docker.io/traefik/whoami:v1.10.1 → ghcr.io/traefik/whoami:v1.11.0') $(jq -r .appVersion "$store/whoami/latest/release.json")" \
   "0 shown v1.11.0"
 
+store=$(released_store v1.10.1 v1.10.1)
+sed -i 's|^services:$|services: # app services|' "$store/whoami/latest/docker-compose.yml"
+set_image "$store" v1.11.0
+answer "$store" $'\nn'
+assert_equal "follows the app's image when the services header has a comment" \
+  "$status $(shown 'whoami: docker.io/traefik/whoami v1.10.1 → v1.11.0') $(jq -r .appVersion "$store/whoami/latest/release.json")" \
+  "0 shown v1.11.0"
+
+store=$(released_store v1.10.1 v1.10.1)
+sed -i 's|^  whoami:$|  web:|' "$store/whoami/latest/docker-compose.yml"
+set_image "$store" v1.11.0
+answer "$store" $'\nn'
+assert_equal "follows the app's image when its service is renamed" \
+  "$status $(shown 'whoami: docker.io/traefik/whoami v1.10.1 → v1.11.0') $(jq -r .appVersion "$store/whoami/latest/release.json")" \
+  "0 shown v1.11.0"
+
+store=$(new_store)
+add_service "$store" cron docker.io/traefik/whoami:v1.10.1
+release "$store"
+commit "$store" "release 1"
+sed -i 's|^  whoami:$|  web:|; s|^  cron:$|  jobs:|; s|whoami:v1.10.1|whoami:v1.11.0|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nv1.11.0\nn'
+assert_equal "offers no appVersion when renamed services share one image" \
+  "$status $(shown 'whoami: docker.io/traefik/whoami:v1.10.1 removed') $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/latest/release.json")" \
+  "0 shown shown v1.11.0"
+
+store=$(new_store)
+add_service "$store" cron docker.io/traefik/whoami:v1.10.1
+release "$store"
+commit "$store" "release 1"
+sed -i 's|whoami:v1.10.1|whoami:v1.11.0|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'v1.11.0-rc1\nn'
+sed -i 's|^  cron:$|  jobs:|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps a typed appVersion when a service sharing the app image is only renamed" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.11.0-rc1"
+
+store=$(released_store v1.10.1 v1.10.1)
+sed -i 's|^  whoami:$|  web:|' "$store/whoami/latest/docker-compose.yml"
+set_image "$store" v1.11.0
+answer "$store" $'v1.11.0-rc1\nn'
+set_image "$store" v1.12.0
+answer "$store" $'\nn'
+assert_equal "drops a typed appVersion when a renamed app image moves after this branch's release" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.12.0"
+
+store=$(released_store v1.10.1 v1.10.1)
+set_image "$store" v1.11.0
+echo 'services: [' >> "$store/whoami/latest/docker-compose.yml"
+run env BASE_REF=HEAD APP_VERSION=v1.11.0 CAN_SKIP=false "$store/scripts/release.sh" whoami < /dev/null
+assert_equal "refuses a compose it cannot read and writes no release" \
+  "$status $(shown "$store/whoami/latest/docker-compose.yml") $(jq -c '.releases | length' "$store/whoami/manifest.json") $([[ -e "$store/whoami/releases/2" ]] || echo absent)" \
+  "1 shown 1 absent"
+
 store=$(new_store)
 add_service "$store" cache docker.io/library/redis:7.4
 release "$store"

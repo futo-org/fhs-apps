@@ -13,21 +13,28 @@ base=${BASE_REF:-origin/master}
 pending=""
 
 images() {
-  awk -v quote="'" '
-    /^[^[:space:]#]/ { in_services = /^services:[[:space:]]*$/; service = ""; next }
-    in_services && /^  [^[:space:]#][^:]*:[[:space:]]*$/ { service = $1; sub(/:$/, "", service); next }
-    in_services && service != "" && $1 == "image:" {
-      ref = $2; gsub(/"/, "", ref); gsub(quote, "", ref); sub(/@.*/, "", ref)
-      repo = ref; tag = "-"
-      if (match(ref, /:[^:\/]+$/)) { repo = substr(ref, 1, RSTART - 1); tag = substr(ref, RSTART + 1) }
-      print service, repo, tag
-    }
-  ' "$1/docker-compose.yml"
+  docker compose -p release -f "$1/docker-compose.yml" config --no-interpolate --no-path-resolution --no-env-resolution --format json \
+    | jq -r '.services | to_entries[] | select(.value.image) | .key as $service | .value.image | sub("@.*"; "")
+      | (capture("^(?<repo>.*):(?<tag>[^:/]+)$") // {repo: ., tag: "-"}) | "\($service) \(.repo) \(.tag)"'
 }
 
 image_changes() {
-  awk 'NR == FNR { old[$1] = $2 " " $3; next } ($1 in old) && old[$1] != $2 " " $3 { print $1, old[$1], $2, $3 }' \
-    <(images "$1") <(images "$2")
+  awk '
+    NR == FNR && NF { old[$1] = $2 " " $3; repo[$1] = $2; order[++count] = $1; next }
+    NR == FNR { next }
+    NF { kept[$1] }
+    $1 in old { if (old[$1] != $2 " " $3) print $1, old[$1], $2, $3; next }
+    NF { added[$2]++; added_tag[$2] = $3 }
+    END {
+      for (i = 1; i <= count; i++) if (!(order[i] in kept)) removed[repo[order[i]]]++
+      for (i = 1; i <= count; i++) {
+        service = order[i]; image = repo[service]
+        if (service in kept) continue
+        if (removed[image] != 1 || added[image] != 1) print service, old[service], "-", "-"
+        else if (old[service] != image " " added_tag[image]) print service, old[service], image, added_tag[image]
+      }
+    }
+  ' <(printf '%s\n' "$1") <(printf '%s\n' "$2")
 }
 
 of_services() {
@@ -42,7 +49,8 @@ of_services() {
 
 show_changes() {
   awk -v app="$app" '!seen[$2, $3, $4, $5]++ {
-    if ($2 == $4) print app ": " $2 " " $3 " → " $5
+    if ($4 == "-") print app ": " $2 ":" $3 " removed"
+    else if ($2 == $4) print app ": " $2 " " $3 " → " $5
     else print app ": " $2 ":" $3 " → " $4 ":" $5
   }' <<< "$1" >&2
 }
@@ -61,33 +69,34 @@ shaped_like() {
 }
 
 app_services() {
-  local dir=$1 previous=$2 service tag
+  local images=$1 previous=$2 service tag
   while read -r service _ tag; do
-    if [[ $(shaped_like "$previous" "$tag") == "$previous" ]]; then
+    if [[ -n $service && $(shaped_like "$previous" "$tag") == "$previous" ]]; then
       echo "$service"
     fi
-  done < <(images "$dir")
+  done <<< "$images"
 }
 
 guess_version() {
-  local previous=$1 current=$2 kept_dir=$3 draft_dir=$4 services changes app_changes candidates moved=""
+  local previous=$1 current=$2 changes=$3 kept_images=$4 draft_images=$5 services app_changes candidates draft_changes
 
   if [[ -z $previous ]]; then
     echo "$current"
     return
   fi
 
-  services=$(app_services "$kept_dir" "$previous")
-  if [[ -n $draft_dir ]]; then
-    moved=$(of_services "$(image_changes "$draft_dir" "$latest")" "$services")
+  services=$(app_services "$kept_images" "$previous")
+  app_changes=$(of_services "$changes" "$services" | sort)
+  draft_changes=$app_changes
+  if [[ -n $draft_images ]]; then
+    draft_changes=$(of_services "$(image_changes "$kept_images" "$draft_images")" "$services" | sort)
   fi
 
-  if [[ -n $current && $current != "$previous" && -z $moved ]]; then
+  if [[ -n $current && $current != "$previous" && $app_changes == "$draft_changes" ]]; then
     echo "$current"
     return
   fi
 
-  changes=$(image_changes "$kept_dir" "$latest")
   if [[ -z $changes ]]; then
     echo "$previous"
     return
@@ -97,9 +106,12 @@ guess_version() {
     return
   fi
 
-  app_changes=$(of_services "$changes" "$services")
   if [[ -z $app_changes ]]; then
     echo "$previous"
+    return
+  fi
+
+  if awk '$4 == "-" { removed = 1 } END { exit !removed }' <<< "$app_changes"; then
     return
   fi
 
@@ -197,7 +209,8 @@ write_release_answers() {
 }
 
 ask_release() {
-  local previous_dir="$app/releases/$kept" draft_dir="" previous="" last_can_skip="" changes="" current guess
+  local previous_dir="$app/releases/$kept" previous="" last_can_skip="" changes="" kept_images="" draft_images=""
+  local current latest_images guess
   local version=${APP_VERSION:-} can_skip=${CAN_SKIP:-}
 
   case $can_skip in
@@ -210,15 +223,17 @@ ask_release() {
 
   require_release_object
   current=$(jq -r '.appVersion | strings' "$latest/release.json")
+  latest_images=$(images "$latest")
 
   if ((kept > 0)); then
     previous=$(jq -r '.appVersion | strings' "$previous_dir/release.json")
     last_can_skip=$(jq -r --argjson kept "$kept" 'if .releases[$kept - 1].canSkip then "yes" else "no" end' "$manifest")
-    changes=$(image_changes "$previous_dir" "$latest")
+    kept_images=$(images "$previous_dir")
+    changes=$(image_changes "$kept_images" "$latest_images")
   fi
 
   if ((kept < last)); then
-    draft_dir="$app/releases/$next"
+    draft_images=$(images "$app/releases/$next")
   fi
 
   if [[ -z $version || -z $can_skip ]] && [[ -n $changes ]]; then
@@ -226,7 +241,7 @@ ask_release() {
   fi
 
   if [[ -z $version ]]; then
-    guess=$(guess_version "$previous" "$current" "$previous_dir" "$draft_dir")
+    guess=$(guess_version "$previous" "$current" "$changes" "$kept_images" "$draft_images")
     while [[ -z $version ]]; do
       ask "appVersion${guess:+ [$guess]}: " "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP"
       version=${REPLY:-$guess}
