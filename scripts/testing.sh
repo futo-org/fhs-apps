@@ -109,6 +109,13 @@ EOF
 EOF
 }
 
+release() {
+  local app=${2:-whoami}
+  local release_json="$1/$app/latest/release.json"
+  APP_VERSION=$(jq -r .appVersion "$release_json") CAN_SKIP=$(jq .canSkip "$release_json") \
+  BASE_REF=HEAD "$1/scripts/release.sh" "$app" > /dev/null < /dev/null
+}
+
 commit() {
   git -C "$1" add -A
   git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm "$2"

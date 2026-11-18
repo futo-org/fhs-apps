@@ -22,11 +22,15 @@ scripts/                  # bash tooling, run with `mise run <task>`
 ## Releases
 
 * A PR that changes `<app>/latest/` also adds its release: run `mise run release <app>`,
-  which copies `latest/` to `releases/<n+1>/` and appends `{version, appVersion, canSkip}`
-  to the manifest. Run it again after every change; it rebuilds the PR's release, so a PR
-  adds exactly one. CI rejects a `latest/` that differs from the newest release, and a PR
-  that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
-  master's side and run it again.
+  which asks `appVersion` (guessed from the changed image tag, Enter takes it) and
+  `canSkip`, writes them to `latest/release.json`, copies `latest/` to `releases/<n+1>/`
+  and appends `{version, appVersion, canSkip}` to the manifest. Without `<app>` it lists the
+  apps, marks the ones with unreleased changes, and asks which one. Without a terminal, pass
+  the app and both answers: `APP_VERSION=v1.2.3 CAN_SKIP=true mise run release <app>`. Run
+  it again after every change; it rebuilds the PR's release, so a PR adds exactly one. CI
+  rejects a `latest/` that differs from the newest release, and a PR that adds more than
+  one release. On a conflict in `releases/` or `manifest.json`, take master's side and run
+  it again.
 * `version` is the release number (1, 2, 3, ...); updates follow it. `appVersion` is the
   upstream version, shown to users only; a manifest entry's must match its release's
   `release.json`.
@@ -126,8 +130,9 @@ scripts/
   `APP_TZ` in the environment. A stored value the release doesn't accept exits 10, its key
   on stdout and the reason on stderr; any other failure exits non zero with the reason.
 * `mise run ci-run install|update <app-id>`: runs the app like a device (pulls images).
-* `mise run release <app-id>`: freezes `latest/` into the PR's release (`BASE_REF`,
-  default `origin/master`, is the branch the PR merges into).
+* `mise run release [<app-id>]`: freezes `latest/` into the PR's release, asking for the
+  app when none is given (`BASE_REF`, default `origin/master`, is the branch the PR merges
+  into).
 * `mise run pack <out>`: the store bundle devices download, the same bytes for the same store.
   Fails over the agent's limits: 1 MiB packed, 64 MiB unpacked.
 * `mise run publish commit`: what CI runs on `master` once `validate` passes. Pushes
