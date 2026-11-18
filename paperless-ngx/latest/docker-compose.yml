@@ -10,7 +10,7 @@ services:
       - ${APP_DATA_DIR}/redis:/data
 
   webserver:
-    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.1
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.5.1
     restart: unless-stopped
     depends_on:
       - broker
