@@ -69,16 +69,18 @@ shaped_like() {
 }
 
 app_services() {
-  local images=$1 previous=$2 service tag
+  local images=$1 previous=$2 service tag version
+  version=$(shaped_like "$previous" "$previous")
   while read -r service _ tag; do
-    if [[ -n $service && $(shaped_like "$previous" "$tag") == "$previous" ]]; then
+    if [[ -n $service && $(shaped_like "$previous" "$tag") == "$version" ]]; then
       echo "$service"
     fi
   done <<< "$images"
 }
 
 guess_version() {
-  local previous=$1 current=$2 changes=$3 kept_images=$4 draft_images=$5 services app_changes candidates draft_changes
+  local previous=$1 current=$2 changes=$3 kept_images=$4 draft_images=$5 latest_images=$6
+  local services app_changes candidates draft_changes moved=""
 
   if [[ -z $previous ]]; then
     echo "$current"
@@ -87,12 +89,14 @@ guess_version() {
 
   services=$(app_services "$kept_images" "$previous")
   app_changes=$(of_services "$changes" "$services" | sort)
-  draft_changes=$app_changes
-  if [[ -n $draft_images ]]; then
+  if [[ -n $draft_images && -n $services ]]; then
     draft_changes=$(of_services "$(image_changes "$kept_images" "$draft_images")" "$services" | sort)
+    [[ $app_changes == "$draft_changes" ]] || moved=yes
+  elif [[ -n $draft_images ]]; then
+    moved=$(of_services "$(image_changes "$draft_images" "$latest_images")" "$(app_services "$draft_images" "$current")")
   fi
 
-  if [[ -n $current && $current != "$previous" && $app_changes == "$draft_changes" ]]; then
+  if [[ -n $current && $current != "$previous" && -z $moved ]]; then
     echo "$current"
     return
   fi
@@ -241,7 +245,7 @@ ask_release() {
   fi
 
   if [[ -z $version ]]; then
-    guess=$(guess_version "$previous" "$current" "$changes" "$kept_images" "$draft_images")
+    guess=$(guess_version "$previous" "$current" "$changes" "$kept_images" "$draft_images" "$latest_images")
     while [[ -z $version ]]; do
       ask "appVersion${guess:+ [$guess]}: " "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP"
       version=${REPLY:-$guess}

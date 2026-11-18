@@ -134,6 +134,30 @@ assert_equal "offers no appVersion when the app images disagree" \
   "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/latest/release.json")" "0 shown v1.11.0"
 
 store=$(new_store)
+write_release "$store/whoami/latest" "whoami 1.10" false
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+answer "$store" $'v1.11.0-rc1\nn'
+sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps a typed appVersion when only a sidecar moved and the last appVersion matches no image" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.11.0-rc1"
+
+store=$(new_store)
+write_release "$store/whoami/latest" "whoami 1.10" false
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+answer "$store" $'v1.11.0-rc1\nn'
+set_image "$store" v1.12.0
+answer "$store" $'\nv1.12.0\nn'
+assert_equal "offers no appVersion when the app image moved and the last appVersion matches no image" \
+  "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 shown v1.12.0"
+
+store=$(new_store)
 add_service "$store" db docker.io/library/postgres:17.11-alpine
 release "$store"
 commit "$store" "release 1"
