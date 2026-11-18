@@ -150,6 +150,46 @@ for typed in v1.11.0-rc1 "whoami 1.11 RC1"; do
 done
 
 store=$(new_store)
+write_release "$store/whoami/latest" r7 false
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+answer "$store" $'r8\nn'
+set_image "$store" v1.12.0
+answer "$store" $'\nr9\nn'
+assert_equal "offers no appVersion when the app image moved and neither version matches an image" \
+  "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 shown r9"
+
+for moved in 's|postgres:17.12-alpine|postgres:17.13-alpine|' 's|whoami:v1.11.0|whoami:v1.12.0|'; do
+  store=$(new_store)
+  write_release "$store/whoami/latest" r7 false
+  add_service "$store" db docker.io/library/postgres:17.11-alpine
+  release "$store"
+  commit "$store" "release 1"
+  set_image "$store" v1.11.0
+  sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
+  answer "$store" $'r8\nn'
+  sed -i "$moved" "$store/whoami/latest/docker-compose.yml"
+  answer "$store" $'\nr8\nn'
+  assert_equal "offers no appVersion when neither version matches an image, the branch moved several images, then $moved" \
+    "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 shown r8"
+done
+
+store=$(new_store)
+write_release "$store/whoami/latest" r7 false
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'v1.11.0-rc1\nn'
+sed -i 's|postgres:17.12-alpine|postgres:17.13-alpine|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps a typed appVersion matching the app image when the branch moved several images and a sidecar moves" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.11.0-rc1"
+
+store=$(new_store)
 write_release "$store/whoami/latest" "whoami 1.10" false
 add_service "$store" db docker.io/library/postgres:17.11-alpine
 release "$store"

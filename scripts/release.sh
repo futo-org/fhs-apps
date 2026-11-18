@@ -88,9 +88,36 @@ app_services() {
   done <<< "$images"
 }
 
+moved_since_draft() {
+  local kept_images=$1 draft_images=$2 latest_images=$3 services=$4 current=$5 drafted drafted_services
+  drafted=$(image_changes "$kept_images" "$draft_images")
+
+  if [[ -z $services ]]; then
+    services=$(app_services "$draft_images" "$current")
+    if [[ -n $services ]]; then
+      of_services "$(image_changes "$draft_images" "$latest_images")" "$services"
+      return
+    fi
+
+    drafted_services=$(cut -d' ' -f1 <<< "$drafted" | sort -u)
+    if [[ -n $drafted_services && $(wc -l <<< "$drafted_services") == 1 ]]; then
+      services=$drafted_services
+    fi
+  fi
+
+  if [[ -z $services ]]; then
+    image_changes "$draft_images" "$latest_images"
+    return
+  fi
+
+  if [[ $(of_services "$(image_changes "$kept_images" "$latest_images")" "$services" | sort) != "$(of_services "$drafted" "$services" | sort)" ]]; then
+    echo moved
+  fi
+}
+
 guess_version() {
   local previous=$1 current=$2 changes=$3 kept_images=$4 draft_images=$5 latest_images=$6
-  local services app_changes candidates draft_changes draft_services moved=""
+  local services app_changes candidates moved=""
 
   if [[ -z $previous ]]; then
     echo "$current"
@@ -99,14 +126,8 @@ guess_version() {
 
   services=$(app_services "$kept_images" "$previous")
   app_changes=$(of_services "$changes" "$services" | sort)
-  if [[ -n $draft_images && -n $services ]]; then
-    draft_changes=$(of_services "$(image_changes "$kept_images" "$draft_images")" "$services" | sort)
-    [[ $app_changes == "$draft_changes" ]] || moved=yes
-  elif [[ -n $draft_images ]]; then
-    draft_services=$(app_services "$draft_images" "$current")
-    if [[ -n $draft_services ]]; then
-      moved=$(of_services "$(image_changes "$draft_images" "$latest_images")" "$draft_services")
-    fi
+  if [[ -n $draft_images ]]; then
+    moved=$(moved_since_draft "$kept_images" "$draft_images" "$latest_images" "$services" "$current")
   fi
 
   if [[ -n $current && $current != "$previous" && -z $moved ]]; then
