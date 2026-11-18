@@ -1,0 +1,5 @@
+url=http://127.0.0.1:8222/alive
+if ! curl -fsS --max-time 4 -o /dev/null "$url"; then
+  echo "Vaultwarden isn't ready: GET $url failed"
+  exit 1
+fi
