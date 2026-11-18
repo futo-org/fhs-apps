@@ -10,15 +10,41 @@ fi
 
 app=${1:-}
 base=${BASE_REF:-origin/master}
+pending=""
 
 images() {
-  sed -n -E "s/^[[:space:]]*image:[[:space:]]*[\"']?([^\"'@[:space:]]+).*/\1/p" "$1/docker-compose.yml" \
-    | sed -E 's/:([^:/]+)$/ \1/'
+  awk -v quote="'" '
+    /^[^[:space:]#]/ { in_services = /^services:[[:space:]]*$/; service = ""; next }
+    in_services && /^  [^[:space:]#][^:]*:[[:space:]]*$/ { service = $1; sub(/:$/, "", service); next }
+    in_services && service != "" && $1 == "image:" {
+      ref = $2; gsub(/"/, "", ref); gsub(quote, "", ref); sub(/@.*/, "", ref)
+      repo = ref; tag = "-"
+      if (match(ref, /:[^:\/]+$/)) { repo = substr(ref, 1, RSTART - 1); tag = substr(ref, RSTART + 1) }
+      print service, repo, tag
+    }
+  ' "$1/docker-compose.yml"
 }
 
 image_changes() {
-  awk 'NR == FNR { old[$1] = $2; next } ($1 in old) && old[$1] != $2 && !seen[$0]++ { print $1, old[$1], $2 }' \
+  awk 'NR == FNR { old[$1] = $2 " " $3; next } ($1 in old) && old[$1] != $2 " " $3 { print $1, old[$1], $2, $3 }' \
     <(images "$1") <(images "$2")
+}
+
+of_services() {
+  local changes=$1 services=$2
+  if [[ -z $changes || -z $services ]]; then
+    echo "$changes"
+    return
+  fi
+
+  awk 'NR == FNR { keep[$1]; next } $1 in keep' <(echo "$services") <(echo "$changes")
+}
+
+show_changes() {
+  awk -v app="$app" '!seen[$2, $3, $4, $5]++ {
+    if ($2 == $4) print app ": " $2 " " $3 " → " $5
+    else print app ": " $2 ":" $3 " → " $4 ":" $5
+  }' <<< "$1" >&2
 }
 
 shaped_like() {
@@ -34,25 +60,53 @@ shaped_like() {
   echo "$shaped"
 }
 
-guess_version() {
-  local previous=$1 current=$2 changes=$3 moved_since_answer=$4 old new
+app_services() {
+  local dir=$1 previous=$2 service tag
+  while read -r service _ tag; do
+    if [[ $(shaped_like "$previous" "$tag") == "$previous" ]]; then
+      echo "$service"
+    fi
+  done < <(images "$dir")
+}
 
-  if [[ $current != "$previous" && -z $moved_since_answer ]]; then
+guess_version() {
+  local previous=$1 current=$2 kept_dir=$3 draft_dir=$4 services changes app_changes candidates moved=""
+
+  if [[ -z $previous ]]; then
     echo "$current"
     return
   fi
 
+  services=$(app_services "$kept_dir" "$previous")
+  if [[ -n $draft_dir ]]; then
+    moved=$(of_services "$(image_changes "$draft_dir" "$latest")" "$services")
+  fi
+
+  if [[ -n $current && $current != "$previous" && -z $moved ]]; then
+    echo "$current"
+    return
+  fi
+
+  changes=$(image_changes "$kept_dir" "$latest")
   if [[ -z $changes ]]; then
     echo "$previous"
     return
   fi
 
-  while read -r _ old new; do
-    if [[ $(shaped_like "$previous" "$old") == "$previous" ]]; then
-      shaped_like "$previous" "$new"
-      return
-    fi
-  done <<< "$changes"
+  if [[ -z $services ]]; then
+    return
+  fi
+
+  app_changes=$(of_services "$changes" "$services")
+  if [[ -z $app_changes ]]; then
+    echo "$previous"
+    return
+  fi
+
+  candidates=$(while read -r _ _ _ _ tag; do shaped_like "$previous" "$tag"; done <<< "$app_changes" | sort -u)
+  if [[ $(wc -l <<< "$candidates") == 1 ]]; then
+    echo "$candidates"
+  fi
 }
 
 ask() {
@@ -65,26 +119,35 @@ ask() {
   fi
 }
 
-has_unreleased_changes() {
-  local count
+release_state() {
+  local count status=0
   count=$(jq '.releases | length' "$1/manifest.json")
-  ((count == 0)) || ! diff -r -q "$1/latest" "$1/releases/$count" > /dev/null
+  if ((count == 0)); then
+    echo changed
+    return
+  fi
+
+  diff -r -q "$1/latest" "$1/releases/$count" > /dev/null 2>&1 || status=$?
+  case $status in
+    0) ;;
+    1) echo changed ;;
+    *) echo "releases/$count unreadable" ;;
+  esac
 }
 
 pick_app() {
-  local apps=() changed=() dir id index default="" marker
+  local apps=() changed=() dir id index default="" state
   for dir in */manifest.json; do
     id=${dir%/manifest.json}
     [[ $id == _* ]] || apps+=("$id")
   done
 
   for index in "${!apps[@]}"; do
-    marker=""
-    if has_unreleased_changes "${apps[index]}"; then
+    state=$(release_state "${apps[index]}")
+    if [[ $state == changed ]]; then
       changed+=("${apps[index]}")
-      marker="  changed"
     fi
-    printf '%d) %s%s\n' $((index + 1)) "${apps[index]}" "$marker" >&2
+    printf '%d) %s%s\n' $((index + 1)) "${apps[index]}" "${state:+  $state}" >&2
   done
 
   if ((${#changed[@]} == 1)); then
@@ -93,20 +156,48 @@ pick_app() {
 
   while [[ -z $app ]]; do
     ask "app${default:+ [$default]}: " "no app picked; run it in a terminal or pass one: mise run release <app-id>"
-    REPLY=${REPLY:-$default}
+    if [[ -z $REPLY ]]; then
+      app=$default
+      continue
+    fi
+
     for index in "${!apps[@]}"; do
-      if [[ $REPLY == "${apps[index]}" ]]; then
+      if [[ $REPLY == "$((index + 1))" ]]; then
+        app=${apps[index]}
+      fi
+    done
+    for index in "${!apps[@]}"; do
+      if [[ -z $app && $REPLY == "${apps[index]}" ]]; then
         app=$REPLY
       fi
     done
-    if [[ -z $app && $REPLY =~ ^[0-9]+$ ]] && ((REPLY >= 1 && REPLY <= ${#apps[@]})); then
-      app=${apps[REPLY - 1]}
-    fi
   done
 }
 
+require_release_object() {
+  if ! jq -s -e 'length == 1 and (.[0] | type == "object")' "$latest/release.json" > /dev/null; then
+    echo "$latest/release.json: want one JSON object" >&2
+    exit 1
+  fi
+}
+
+write_release_answers() {
+  local version=$1 can_skip=$2 answered
+  if jq -e --arg version "$version" --argjson canSkip "$can_skip" \
+    '.appVersion == $version and .canSkip == $canSkip' "$latest/release.json" > /dev/null; then
+    return
+  fi
+
+  answered=$(jq --arg version "$version" --argjson canSkip "$can_skip" \
+    '.appVersion = $version | .canSkip = $canSkip' "$latest/release.json")
+  pending=$(mktemp "$latest/.release.json.XXXXXX")
+  cp -p "$latest/release.json" "$pending"
+  printf '%s\n' "$answered" > "$pending"
+  mv "$pending" "$latest/release.json"
+}
+
 ask_release() {
-  local previous_dir="$app/releases/$kept" previous="" last_can_skip="" changes="" moved_since_answer="" guess answered
+  local previous_dir="$app/releases/$kept" draft_dir="" previous="" last_can_skip="" changes="" current guess
   local version=${APP_VERSION:-} can_skip=${CAN_SKIP:-}
 
   case $can_skip in
@@ -117,22 +208,25 @@ ask_release() {
       ;;
   esac
 
+  require_release_object
+  current=$(jq -r '.appVersion | strings' "$latest/release.json")
+
   if ((kept > 0)); then
-    previous=$(jq -r .appVersion "$previous_dir/release.json")
-    last_can_skip=$(jq -r 'if .canSkip then "yes" else "no" end' "$previous_dir/release.json")
+    previous=$(jq -r '.appVersion | strings' "$previous_dir/release.json")
+    last_can_skip=$(jq -r --argjson kept "$kept" 'if .releases[$kept - 1].canSkip then "yes" else "no" end' "$manifest")
     changes=$(image_changes "$previous_dir" "$latest")
   fi
 
   if ((kept < last)); then
-    moved_since_answer=$(image_changes "$app/releases/$next" "$latest")
+    draft_dir="$app/releases/$next"
   fi
 
   if [[ -z $version || -z $can_skip ]] && [[ -n $changes ]]; then
-    awk -v app="$app" '{ print app ": " $1 " " $2 " → " $3 }' <<< "$changes" >&2
+    show_changes "$changes"
   fi
 
   if [[ -z $version ]]; then
-    guess=$(guess_version "$previous" "$(jq -r .appVersion "$latest/release.json")" "$changes" "$moved_since_answer")
+    guess=$(guess_version "$previous" "$current" "$previous_dir" "$draft_dir")
     while [[ -z $version ]]; do
       ask "appVersion${guess:+ [$guess]}: " "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP"
       version=${REPLY:-$guess}
@@ -147,9 +241,7 @@ ask_release() {
     esac
   done
 
-  answered=$(jq --arg version "$version" --argjson canSkip "$can_skip" \
-    '.appVersion = $version | .canSkip = $canSkip' "$latest/release.json")
-  printf '%s\n' "$answered" > "$latest/release.json"
+  write_release_answers "$version" "$can_skip"
 }
 
 is_unchanged() {
@@ -191,10 +283,10 @@ kept=$((last > published ? last - 1 : last))
 next=$((kept + 1))
 
 staged=$(mktemp -d)
-trap 'rm -rf "$staged"' EXIT
+trap 'rm -rf "$staged" ${pending:+"$pending"}' EXIT
 jq --argjson kept "$kept" '.releases |= .[:$kept]' "$manifest" > "$staged/manifest.json"
 
-if is_unchanged; then
+if is_unchanged && [[ -z ${APP_VERSION:-}${CAN_SKIP:-} ]]; then
   release_nothing
 fi
 

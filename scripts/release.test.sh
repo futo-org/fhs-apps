@@ -4,6 +4,8 @@ set -euo pipefail
 # shellcheck source=testing.sh
 source "$(dirname "$0")/testing.sh"
 
+unset APP_VERSION CAN_SKIP
+
 set_image() {
   sed -i -E "s|image: docker.io/traefik/whoami:.*|image: docker.io/traefik/whoami:$2|" "$1/whoami/latest/docker-compose.yml"
 }
@@ -16,6 +18,10 @@ released_store() {
   release "$store"
   commit "$store" "release 1"
   echo "$store"
+}
+
+add_service() {
+  sed -i "s|^  whoami:|  $2:\n    image: $3\n  whoami:|" "$1/whoami/latest/docker-compose.yml"
 }
 
 answer() {
@@ -99,7 +105,7 @@ v3.3.1 v3.3.1 v3.4.0@sha256:abc v3.4.0
 EOF
 
 store=$(new_store)
-sed -i 's|^  whoami:|  db:\n    image: docker.io/library/postgres:17.11-alpine\n  whoami:|' "$store/whoami/latest/docker-compose.yml"
+add_service "$store" db docker.io/library/postgres:17.11-alpine
 release "$store"
 commit "$store" "release 1"
 sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
@@ -109,13 +115,94 @@ assert_equal "guesses from the app's image when a sidecar listed first also chan
   "$status $(jq -r .appVersion "$store/whoami/latest/release.json")" "0 v1.11.0"
 
 store=$(new_store)
-sed -i 's|^  whoami:|  cron:\n    image: docker.io/traefik/whoami:v1.10.1\n  whoami:|' "$store/whoami/latest/docker-compose.yml"
+add_service "$store" cron docker.io/traefik/whoami:v1.10.1
 release "$store"
 commit "$store" "release 1"
 sed -i 's|whoami:v1.10.1|whoami:v1.11.0|' "$store/whoami/latest/docker-compose.yml"
 answer "$store" $'\nn'
 assert_equal "shows an image change once when two services share the image" \
   "$(grep -c 'whoami v1.10.1 → v1.11.0' <<< "$output")" 1
+
+store=$(new_store)
+add_service "$store" ml docker.io/traefik/whoami-ml:v1.10.1
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+sed -i 's|whoami-ml:v1.10.1|whoami-ml:v1.10.2|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nv1.11.0\nn'
+assert_equal "offers no appVersion when the app images disagree" \
+  "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/latest/release.json")" "0 shown v1.11.0"
+
+store=$(new_store)
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+answer "$store" $'v1.11.0-rc1\nn'
+sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps a typed appVersion when only a sidecar moved after this branch's release" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.11.0-rc1"
+
+store=$(released_store v1.10.1 v1.10.1)
+sed -i 's|docker.io/traefik/whoami:v1.10.1|ghcr.io/traefik/whoami:v1.11.0|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "follows the app's image when its repository is replaced" \
+  "$status $(shown 'whoami: docker.io/traefik/whoami:v1.10.1 → ghcr.io/traefik/whoami:v1.11.0') $(jq -r .appVersion "$store/whoami/latest/release.json")" \
+  "0 shown v1.11.0"
+
+store=$(new_store)
+add_service "$store" cache docker.io/library/redis:7.4
+release "$store"
+commit "$store" "release 1"
+sed -i 's|docker.io/library/redis:7.4|docker.io/valkey/valkey:8.1|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps the last appVersion when only a sidecar's repository is replaced" \
+  "$status $(shown 'appVersion [v1.10.1]: ')" "0 shown"
+
+store=$(new_store)
+edit_json "$store/whoami/latest/release.json" 'del(.appVersion)'
+run env BASE_REF=HEAD "$store/scripts/release.sh" whoami <<< $'\nv1.0.0\nn'
+assert_equal "offers no appVersion when latest/ has none" \
+  "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/latest/release.json")" "0 shown v1.0.0"
+
+for content in '' '   '; do
+  store=$(new_store)
+  printf '%s' "$content" > "$store/whoami/latest/release.json"
+  run env BASE_REF=HEAD APP_VERSION=v1.10.1 CAN_SKIP=false "$store/scripts/release.sh" whoami < /dev/null
+  assert_equal "refuses a release.json of \"$content\" and writes no release" \
+    "$status ${output##*$'\n'} $(jq -c .releases "$store/whoami/manifest.json") $([[ -e "$store/whoami/releases" ]] || echo absent)" \
+    "1 whoami/latest/release.json: want one JSON object [] absent"
+done
+
+if ((EUID == 0)); then
+  echo "skip: leaves latest/release.json as it was when the new one can't be written (root ignores a read only folder)"
+else
+  store=$(released_store v1.10.1 v1.10.1)
+  set_image "$store" v1.11.0
+  before=$(cat "$store/whoami/latest/release.json")
+  chmod a-w "$store/whoami/latest"
+  answer "$store" $'\ny'
+  chmod u+w "$store/whoami/latest"
+  assert_equal "leaves latest/release.json as it was when the new one can't be written" \
+    "$((status != 0)) $(cat "$store/whoami/latest/release.json") $(jq '.releases | length' "$store/whoami/manifest.json")" \
+    "1 $before 1"
+fi
+
+store=$(released_store v1.10.1 v1.10.1)
+edit_json "$store/whoami/manifest.json" '.releases[0].canSkip = true'
+commit "$store" "relax release 1"
+set_image "$store" v1.11.0
+answer "$store" $'\ny'
+assert_equal "shows the last canSkip from the manifest, which may have been relaxed" "$(shown 'canSkip (last: yes) [y/n]: ')" shown
+
+store=$(released_store v1.10.1 v1.10.1)
+run env BASE_REF=HEAD APP_VERSION=v1.10.1 CAN_SKIP=false "$store/scripts/release.sh" whoami < /dev/null
+assert_equal "releases nothing when APP_VERSION and CAN_SKIP match an unchanged latest/" "$status $output" "0 whoami: nothing to release"
+run env BASE_REF=HEAD APP_VERSION=v1.10.1 CAN_SKIP=true "$store/scripts/release.sh" whoami < /dev/null
+assert_equal "applies APP_VERSION and CAN_SKIP to an unchanged latest/ as a new release" \
+  "$status $output $(jq -c '.releases[1]' "$store/whoami/manifest.json")" \
+  '0 whoami: release 2 (v1.10.1) {"version":2,"appVersion":"v1.10.1","canSkip":true}'
 
 store=$(released_store v1.10.1 v1.10.1)
 echo 'exit 0' > "$store/whoami/latest/health-check.sh"
@@ -238,6 +325,8 @@ cp -a "$store/alpha" "$store/2"
 edit_json "$store/2/manifest.json" '.appId = "2"'
 commit "$store" "app 2"
 echo 'exit 0' > "$store/2/latest/health-check.sh"
+run env BASE_REF=HEAD "$store/scripts/release.sh" <<< '2'
+assert_equal "a printed row number picks its row even when an app id is that number" "$status $(shown 'alpha: nothing to release')" "0 shown"
 pick "$store" ''
 assert_equal "Enter takes the offered app even when its id is another row's number" \
   "$status $(shown 'app [2]: ') $(shown '2: release 2 (v1.11.0)')" "0 shown shown"
@@ -250,9 +339,16 @@ assert_equal "picks an app by its id" "$status $(shown 'whoami: release 2 (v1.11
 store=$(two_app_store)
 set_image "$store" v1.11.0
 echo 'exit 0' > "$store/alpha/latest/health-check.sh"
-pick "$store" $'\nnope\n../whoami\n3\n1'
-assert_equal "offers no app when several changed, asks again until a listed number or id, and picks by number" \
-  "$status $(grep -o 'app: ' <<< "$output" | wc -l) $(shown 'alpha: release 2 (v1.11.0)')" "0 5 shown"
+pick "$store" $'\nnope\n../whoami\n3\n08\n010\n18446744073709551618\n1'
+assert_equal "offers no app when several changed, asks again until a printed number or id, and picks by number" \
+  "$status $(grep -o 'app: ' <<< "$output" | wc -l) $(shown 'alpha: release 2 (v1.11.0)')" "0 8 shown"
+
+store=$(two_app_store)
+rm -rf "$store/alpha/releases/1"
+set_image "$store" v1.11.0
+pick "$store" ''
+assert_equal "a release folder that can't be compared is flagged, not counted as changed" \
+  "$status $(shown '1) alpha  releases/1 unreadable') $(shown 'app [whoami]: ')" "0 shown shown"
 
 store=$(two_app_store)
 set_image "$store" v1.11.0
