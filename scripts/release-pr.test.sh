@@ -107,6 +107,20 @@ assert_equal "refuses a release block nested in another" \
   '3 keep one release block in the PR body {"version":1,"appVersion":"v1.10.1","canSkip":false}'
 
 store=$(branch_store)
+example=$(printf '%s\n\nExample:\n\n    <!-- release -->\n    * [x] Release, can skip\n    <!-- /release -->\n' "$(body ' ' ' ')")
+ticked "$store" "$(body ' ' ' ')" "$example"
+assert_equal "ignores a release block in a code example indented by four spaces" \
+  "$status $output $(released "$store")" \
+  '0 no release box was just ticked {"version":1,"appVersion":"v1.10.1","canSkip":false}'
+
+store=$(branch_store)
+tabbed=$(printf 'Update whoami.\n\n\t<!-- release -->\n\t* [x] Release, can skip\n\t<!-- /release -->\n')
+ticked "$store" "Update whoami." "$tabbed"
+assert_equal "ignores a release block in a code example indented by a tab in a body without release controls" \
+  "$status $output $(released "$store")" \
+  '0 no release box was just ticked {"version":1,"appVersion":"v1.10.1","canSkip":false}'
+
+store=$(branch_store)
 indented=$(printf '%s\n\n   ~~~\n<!-- release -->\n* [x] Release, required stop\n<!-- /release -->\n   ~~~\n' "$(body ' ' ' ')")
 ticked "$store" "$(body ' ' ' ')" "$indented"
 assert_equal "ignores a release block inside a fence indented by three spaces" \

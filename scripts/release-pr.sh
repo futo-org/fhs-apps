@@ -16,6 +16,7 @@ refuse() {
 selection() {
   tr -d '\r' <<< "$1" | awk '
     { line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line) }
+    !fence && $0 !~ /^(   |  | )?[^ \t]/ { next }
     !fence && match($0, /^(   |  | )?(```+|~~~+)/) { fence = substr($0, RSTART, RLENGTH); sub(/^ +/, "", fence); next }
     fence {
       if ($0 ~ /^(   |  | )?(`+|~+)[ \t]*$/ && substr(line, 1, 1) == substr(fence, 1, 1) && length(line) >= length(fence)) fence = ""
