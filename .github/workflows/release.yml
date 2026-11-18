@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
       - name: Use the release tooling of the base branch
         env:
-          TRUSTED_SHA: ${{ github.sha }}
+          TRUSTED_SHA: ${{ github.event.pull_request.base.sha }}
         run: git checkout "$TRUSTED_SHA" -- scripts .github/actions
       - uses: ./.github/actions/compose
       - id: release
