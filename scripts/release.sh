@@ -89,28 +89,14 @@ app_services() {
 }
 
 moved_since_draft() {
-  local kept_images=$1 draft_images=$2 latest_images=$3 services=$4 current=$5 drafted drafted_services
-  drafted=$(image_changes "$kept_images" "$draft_images")
+  local kept_images=$1 draft_images=$2 latest_images=$3 services=$4 current=$5
 
   if [[ -z $services ]]; then
-    services=$(app_services "$draft_images" "$current")
-    if [[ -n $services ]]; then
-      of_services "$(image_changes "$draft_images" "$latest_images")" "$services"
-      return
-    fi
-
-    drafted_services=$(cut -d' ' -f1 <<< "$drafted" | sort -u)
-    if [[ -n $drafted_services && $(wc -l <<< "$drafted_services") == 1 ]]; then
-      services=$drafted_services
-    fi
-  fi
-
-  if [[ -z $services ]]; then
-    image_changes "$draft_images" "$latest_images"
+    of_services "$(image_changes "$draft_images" "$latest_images")" "$(app_services "$draft_images" "$current")"
     return
   fi
 
-  if [[ $(of_services "$(image_changes "$kept_images" "$latest_images")" "$services" | sort) != "$(of_services "$drafted" "$services" | sort)" ]]; then
+  if [[ $(of_services "$(image_changes "$kept_images" "$latest_images")" "$services" | sort) != "$(of_services "$(image_changes "$kept_images" "$draft_images")" "$services" | sort)" ]]; then
     echo moved
   fi
 }

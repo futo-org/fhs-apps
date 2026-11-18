@@ -135,18 +135,31 @@ answer "$store" $'\nv1.11.0\nn'
 assert_equal "offers no appVersion when the app images disagree" \
   "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/latest/release.json")" "0 shown v1.11.0"
 
-for typed in v1.11.0-rc1 "whoami 1.11 RC1"; do
+store=$(new_store)
+write_release "$store/whoami/latest" "whoami 1.10" false
+add_service "$store" db docker.io/library/postgres:17.11-alpine
+release "$store"
+commit "$store" "release 1"
+set_image "$store" v1.11.0
+answer "$store" $'v1.11.0-rc1\nn'
+sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
+answer "$store" $'\nn'
+assert_equal "keeps a typed appVersion matching the app image when only a sidecar moved and the last appVersion matches no image" \
+  "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 v1.11.0-rc1"
+
+for edits in 's|whoami:v1.10.1|whoami:v1.11.0|;s|postgres:17.11-alpine|postgres:17.12-alpine|' \
+  's|postgres:17.11-alpine|postgres:17.12-alpine|;s|whoami:v1.10.1|whoami:v1.11.0|'; do
   store=$(new_store)
   write_release "$store/whoami/latest" "whoami 1.10" false
   add_service "$store" db docker.io/library/postgres:17.11-alpine
   release "$store"
   commit "$store" "release 1"
-  set_image "$store" v1.11.0
-  answer "$store" "$typed"$'\nn'
-  sed -i 's|postgres:17.11-alpine|postgres:17.12-alpine|' "$store/whoami/latest/docker-compose.yml"
-  answer "$store" $'\nn'
-  assert_equal "keeps a typed appVersion of $typed when only a sidecar moved and the last appVersion matches no image" \
-    "$status $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 $typed"
+  sed -i "${edits%%;*}" "$store/whoami/latest/docker-compose.yml"
+  answer "$store" $'whoami 1.11 RC1\nn'
+  sed -i "${edits#*;}" "$store/whoami/latest/docker-compose.yml"
+  answer "$store" $'\nr9\nn'
+  assert_equal "offers no appVersion when neither version matches an image and an image moved after this branch's release: $edits" \
+    "$status $(shown 'appVersion: ') $(jq -r .appVersion "$store/whoami/releases/2/release.json")" "0 shown r9"
 done
 
 store=$(new_store)
