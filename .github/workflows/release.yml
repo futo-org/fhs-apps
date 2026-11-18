@@ -1,16 +1,15 @@
 name: Release from PR
 
 on:
-  pull_request:
+  pull_request_target:
     types: [edited]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: release-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -20,12 +19,22 @@ jobs:
       contains(github.event.pull_request.body, '[x] Release, ')
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      outcome: ${{ steps.release.outputs.outcome }}
+      app: ${{ steps.release.outputs.app }}
+      message_json: ${{ steps.release.outputs.message_json }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Use the release tooling of the base branch
+        env:
+          TRUSTED_SHA: ${{ github.sha }}
+        run: git checkout "$TRUSTED_SHA" -- scripts .github/actions
       - uses: ./.github/actions/compose
       - id: release
         name: Release the changed app
@@ -36,58 +45,120 @@ jobs:
         run: |
           status=0
           result=$(bash scripts/release-pr.sh 2> "$RUNNER_TEMP/errors") || status=$?
-          if ((status != 0)); then
+          app=""
+          if ((status == 3)); then
+            outcome=refused
+            message=$(cat "$RUNNER_TEMP/errors")
+          elif ((status != 0)); then
             outcome=failed
             message=$(cat "$RUNNER_TEMP/errors")
           elif [[ $result == "no release box was just ticked" ]]; then
             outcome=none
             message=$result
-          elif [[ -z $(git status --porcelain) ]]; then
-            outcome=nothing
-            message=$result
           else
-            outcome=released
+            app=${result%%:*}
             message=$result
+            git add -A -- "$app"
+            git diff --cached --binary -- "$app" > "$RUNNER_TEMP/release.patch"
+            outcome=$([[ -s $RUNNER_TEMP/release.patch ]] && echo released || echo nothing)
           fi
-          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
-          { echo "message<<MESSAGE_END"; echo "$message"; echo "MESSAGE_END"; } >> "$GITHUB_OUTPUT"
+          {
+            echo "outcome=$outcome"
+            echo "app=$app"
+            echo "message_json=$(jq -cn --arg message "$message" '$message')"
+          } >> "$GITHUB_OUTPUT"
           echo "$message"
+      - if: steps.release.outputs.outcome == 'released'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-patch
+          path: ${{ runner.temp }}/release.patch
+          retention-days: 1
+
+  push:
+    needs: release
+    if: needs.release.outputs.outcome == 'released'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.push.outputs.result }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-patch
+          path: ${{ runner.temp }}
+      - name: Apply the release, refusing paths outside it
+        env:
+          APP: ${{ needs.release.outputs.app }}
+        run: |
+          [[ $APP =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "unexpected app: $APP" >&2; exit 1; }
+          git apply --index --binary "$RUNNER_TEMP/release.patch"
+          while IFS= read -r -d '' path; do
+            [[ $path == "$APP/manifest.json" || $path == "$APP/latest/release.json" || $path =~ ^$APP/releases/[0-9]+/ ]] \
+              || { echo "release touches $path" >&2; exit 1; }
+          done < <(git diff --cached --name-only -z)
       - id: token
-        if: steps.release.outputs.outcome == 'released'
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.FHS_CI_APP_CLIENT_ID }}
           private-key: ${{ secrets.FHS_CI_APP_PRIVATE_KEY }}
           permission-contents: write
       - id: push
-        name: Commit and push the release as the app
-        if: steps.release.outputs.outcome == 'released'
+        name: Commit and push the release as the app, unless the branch moved
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           APP_SLUG: ${{ steps.token.outputs.app-slug }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MESSAGE: ${{ steps.release.outputs.message }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MESSAGE_JSON: ${{ needs.release.outputs.message_json }}
         run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          remote=$(git -c http.extraHeader="AUTHORIZATION: basic $auth" ls-remote origin "refs/heads/$HEAD_REF" | cut -f1)
+          if [[ $remote != "$HEAD_SHA" ]]; then
+            echo "result=stale" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           bot="${APP_SLUG}[bot]"
           bot_id=$(gh api "/users/$bot" --jq .id)
-          git add -A
-          git -c user.name="$bot" -c user.email="$bot_id+$bot@users.noreply.github.com" commit -qm "$MESSAGE"
-          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-          git -c http.extraHeader="AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$HEAD_REF"
+          git -c user.name="$bot" -c user.email="$bot_id+$bot@users.noreply.github.com" commit -qm "$(jq -r . <<< "$MESSAGE_JSON")"
+          git -c http.extraHeader="AUTHORIZATION: basic $auth" push --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" origin "HEAD:refs/heads/$HEAD_REF"
+          echo "result=pushed" >> "$GITHUB_OUTPUT"
+
+  report:
+    needs: [release, push]
+    if: always() && needs.release.outputs.outcome != 'none' && needs.release.outputs.outcome != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
       - name: Comment the result
-        if: always() && steps.release.outputs.outcome != 'none' && steps.release.outputs.outcome != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          OUTCOME: ${{ steps.release.outputs.outcome }}
-          PUSHED: ${{ steps.push.outcome }}
-          MESSAGE: ${{ steps.release.outputs.message }}
+          OUTCOME: ${{ needs.release.outputs.outcome }}
+          PUSHED: ${{ needs.push.outputs.result }}
+          MESSAGE_JSON: ${{ needs.release.outputs.message_json }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          message=$(jq -r . <<< "$MESSAGE_JSON")
           case "$OUTCOME/$PUSHED" in
-            released/success) body="Released: \`$MESSAGE\`" ;;
-            released/*) body="Released \`$MESSAGE\`, but the push failed. See [the run]($RUN_URL)." ;;
-            nothing/*) body="\`$MESSAGE\`" ;;
-            *) body="Release failed:"$'\n\n```\n'"$MESSAGE"$'\n```' ;;
+            released/pushed) body="Released: \`$message\`" ;;
+            released/stale) body="Not released: the branch moved after the box was ticked. Review the new commits, then untick and tick the box again." ;;
+            released/*) body="Released \`$message\`, but the push failed. See [the run]($RUN_URL)." ;;
+            nothing/*) body="\`$message\`" ;;
+            refused/*) body="Not released: $message" ;;
+            *) body="Release failed:"$'\n\n```\n'"$message"$'\n```' ;;
           esac
           gh pr comment "$PR" --body "$body"
+      - name: Fail on an unexpected release error
+        if: needs.release.outputs.outcome == 'failed'
+        run: exit 1

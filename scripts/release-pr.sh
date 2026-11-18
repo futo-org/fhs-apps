@@ -6,43 +6,60 @@ cd "$(dirname "$0")/.."
 base=${BASE_REF:-origin/master}
 body=${BODY:-}
 previous_body=${PREVIOUS_BODY:-}
+refused=3
 
-is_ticked() {
-  grep -qiE "^[*-] \[x\] $1[[:space:]]*$" <<< "$2"
+refuse() {
+  echo "$1" >&2
+  exit "$refused"
 }
 
-is_just_ticked() {
-  is_ticked "$1" "$body" && ! is_ticked "$1" "$previous_body"
+selection() {
+  tr -d '\r' <<< "$1" | awk '
+    { line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line) }
+    line ~ /^(```|~~~)/ { fenced = !fenced; next }
+    fenced { next }
+    line == "<!-- release -->" { inside = 1; skip = 0; stop = 0; next }
+    line == "<!-- /release -->" && inside { inside = 0; blocks++; picked = (skip && stop) ? "both" : skip ? "can skip" : stop ? "required stop" : ""; next }
+    inside && tolower(line) ~ /^[*-] \[x\] release, can skip$/ { skip = 1 }
+    inside && tolower(line) ~ /^[*-] \[x\] release, required stop$/ { stop = 1 }
+    END { print (blocks > 1) ? "duplicate" : picked }
+  '
 }
 
-if ! is_just_ticked "Release, can skip" && ! is_just_ticked "Release, required stop"; then
+current=$(selection "$body")
+previous=$(selection "$previous_body")
+
+if [[ $current == duplicate ]]; then
+  refuse "keep one release block in the PR body"
+fi
+
+if [[ -z $current || $current == "$previous" ]]; then
   echo "no release box was just ticked"
   exit 0
 fi
 
-if is_ticked "Release, can skip" "$body" && is_ticked "Release, required stop" "$body"; then
-  echo "tick one release box, not both" >&2
-  exit 1
+if [[ $current == both ]]; then
+  refuse "tick one release box, not both"
 fi
 
 can_skip=false
-if is_ticked "Release, can skip" "$body"; then
+if [[ $current == "can skip" ]]; then
   can_skip=true
 fi
 
-apps=$(git diff --name-only "$(git merge-base "$base" HEAD)" -- '*/latest/**' ':(exclude)_*' | cut -d/ -f1 | sort -u | paste -sd' ')
+paths=$(mktemp)
+errors=$(mktemp)
+trap 'rm -f "$paths" "$errors"' EXIT
+git diff --no-renames --name-only -z "$(git merge-base "$base" HEAD)" -- '*/latest/**' ':(exclude)_*' > "$paths"
+apps=$(while IFS= read -r -d '' path; do echo "${path%%/*}"; done < "$paths" | sort -u | paste -sd' ')
 if [[ -z $apps || $apps == *" "* ]]; then
-  echo "release needs one changed app, got: ${apps:-none}" >&2
-  exit 1
+  refuse "release needs one changed app, got: ${apps:-none}"
 fi
 
 app=$apps
-errors=$(mktemp)
-trap 'rm -f "$errors"' EXIT
 if ! output=$(printf '\n' | env -u APP_VERSION CAN_SKIP="$can_skip" BASE_REF="$base" scripts/release.sh "$app" 2> "$errors"); then
   if grep -q 'no answer' "$errors"; then
-    echo "$app: no appVersion guess; release it locally: mise run release $app" >&2
-    exit 1
+    refuse "$app: no appVersion guess; release it locally: mise run release $app"
   fi
 
   grep -v '^appVersion\|^canSkip' "$errors" >&2 || true
