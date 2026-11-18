@@ -3,14 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if (($# != 1)); then
-  echo "usage: $0 <app-id>" >&2
+if (($# > 1)); then
+  echo "usage: $0 [app-id]" >&2
   exit 2
 fi
 
-app=$1
-manifest="$app/manifest.json"
-latest="$app/latest"
+app=${1:-}
 base=${BASE_REF:-origin/master}
 
 images() {
@@ -58,12 +56,53 @@ guess_version() {
 }
 
 ask() {
-  printf '%s' "$1" >&2
+  local prompt=$1 no_answer=$2
+  printf '%s' "$prompt" >&2
   if ! IFS= read -r REPLY; then
     echo >&2
-    echo "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP" >&2
+    echo "$no_answer" >&2
     exit 1
   fi
+}
+
+has_unreleased_changes() {
+  local count
+  count=$(jq '.releases | length' "$1/manifest.json")
+  ((count == 0)) || ! diff -r -q "$1/latest" "$1/releases/$count" > /dev/null
+}
+
+pick_app() {
+  local apps=() changed=() dir id index default="" marker
+  for dir in */manifest.json; do
+    id=${dir%/manifest.json}
+    [[ $id == _* ]] || apps+=("$id")
+  done
+
+  for index in "${!apps[@]}"; do
+    marker=""
+    if has_unreleased_changes "${apps[index]}"; then
+      changed+=("${apps[index]}")
+      marker="  changed"
+    fi
+    printf '%d) %s%s\n' $((index + 1)) "${apps[index]}" "$marker" >&2
+  done
+
+  if ((${#changed[@]} == 1)); then
+    default=${changed[0]}
+  fi
+
+  while [[ -z $app ]]; do
+    ask "app${default:+ [$default]}: " "no app picked; run it in a terminal or pass one: mise run release <app-id>"
+    REPLY=${REPLY:-$default}
+    for index in "${!apps[@]}"; do
+      if [[ $REPLY == "${apps[index]}" ]]; then
+        app=$REPLY
+      fi
+    done
+    if [[ -z $app && $REPLY =~ ^[0-9]+$ ]] && ((REPLY >= 1 && REPLY <= ${#apps[@]})); then
+      app=${apps[REPLY - 1]}
+    fi
+  done
 }
 
 ask_release() {
@@ -95,13 +134,13 @@ ask_release() {
   if [[ -z $version ]]; then
     guess=$(guess_version "$previous" "$(jq -r .appVersion "$latest/release.json")" "$changes" "$moved_since_answer")
     while [[ -z $version ]]; do
-      ask "appVersion${guess:+ [$guess]}: "
+      ask "appVersion${guess:+ [$guess]}: " "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP"
       version=${REPLY:-$guess}
     done
   fi
 
   while [[ -z $can_skip ]]; do
-    ask "canSkip${last_can_skip:+ (last: $last_can_skip)} [y/n]: "
+    ask "canSkip${last_can_skip:+ (last: $last_can_skip)} [y/n]: " "$app: no answer; run it in a terminal or set APP_VERSION and CAN_SKIP"
     case $REPLY in
       y | yes) can_skip=true ;;
       n | no) can_skip=false ;;
@@ -125,6 +164,13 @@ release_nothing() {
   echo "$app: nothing to release"
   exit 0
 }
+
+if [[ -z $app ]]; then
+  pick_app
+fi
+
+manifest="$app/manifest.json"
+latest="$app/latest"
 
 [[ -f "$manifest" ]] || {
   echo "$manifest: missing" >&2

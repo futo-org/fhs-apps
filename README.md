@@ -25,7 +25,8 @@ scripts/                  # bash tooling, run with `mise run <task>`
   which asks `appVersion` (guessed from the changed image tag, Enter takes it) and
   `canSkip`, writes them to `latest/release.json`, copies `latest/` to `releases/<n+1>/`
   and appends `{version, appVersion, canSkip}` to the manifest. Without a terminal, set
-  `APP_VERSION` and `CAN_SKIP=true|false`. Run it again after every change; it rebuilds
+  `APP_VERSION` and `CAN_SKIP=true|false`. Without `<app>` it lists the apps, marks the ones
+  with unreleased changes, and asks which one. Run it again after every change; it rebuilds
   the PR's release, so a PR adds exactly one. CI rejects a `latest/` that differs from the
   newest release, and a PR that adds more than one release. On a conflict in `releases/` or `manifest.json`, take
   master's side and run it again.
