@@ -428,9 +428,16 @@ assert_equal "rebuilds the release this branch added once release.json is fixed"
 
 store=$(new_store)
 mkdir -p "$store/whoami/releases/1"
+touch "$store/whoami/releases/1/release.json"
 run env BASE_REF=HEAD "$store/scripts/release.sh" whoami < /dev/null
 assert_equal "refuses, without asking, when the next release folder already exists" "$status $output" \
   "1 whoami/releases/1: already exists"
+
+store=$(new_store)
+mkdir -p "$store/whoami/releases/1/data/config"
+run env BASE_REF=HEAD APP_VERSION=v1.10.1 CAN_SKIP=false "$store/scripts/release.sh" whoami < /dev/null
+assert_equal "replaces a next release folder left over with no files in it" \
+  "$status $output $(diff -r "$store/whoami/latest" "$store/whoami/releases/1" && echo same)" "0 whoami: release 1 (v1.10.1) same"
 
 two_app_store() {
   local store

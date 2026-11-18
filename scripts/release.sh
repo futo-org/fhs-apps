@@ -329,7 +329,7 @@ if is_unchanged && [[ -z ${APP_VERSION:-}${CAN_SKIP:-} ]]; then
   release_nothing
 fi
 
-if ((kept == last)) && [[ -e "$app/releases/$next" ]]; then
+if ((kept == last)) && [[ -n $(find "$app/releases/$next" ! -type d -print -quit 2> /dev/null) ]]; then
   echo "$app/releases/$next: already exists" >&2
   exit 1
 fi
