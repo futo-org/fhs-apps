@@ -7,11 +7,6 @@
       "version": 1,
       "appVersion": "v3.3.1",
       "canSkip": true
-    },
-    {
-      "version": 2,
-      "appVersion": "v3.5.1",
-      "canSkip": true
     }
   ]
 }
