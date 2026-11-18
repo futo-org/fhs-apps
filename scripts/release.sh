@@ -68,6 +68,16 @@ shaped_like() {
   echo "$shaped"
 }
 
+version_from() {
+  local previous=$1 tag=${2#v}
+  if [[ ${previous#v} == *-* && $tag == *-* ]]; then
+    echo "$(shaped_like "$previous" "$tag")-${tag#*-}"
+    return
+  fi
+
+  shaped_like "$previous" "$tag"
+}
+
 app_services() {
   local images=$1 previous=$2 service tag version
   version=$(shaped_like "$previous" "$previous")
@@ -80,7 +90,7 @@ app_services() {
 
 guess_version() {
   local previous=$1 current=$2 changes=$3 kept_images=$4 draft_images=$5 latest_images=$6
-  local services app_changes candidates draft_changes moved=""
+  local services app_changes candidates draft_changes draft_services moved=""
 
   if [[ -z $previous ]]; then
     echo "$current"
@@ -93,7 +103,10 @@ guess_version() {
     draft_changes=$(of_services "$(image_changes "$kept_images" "$draft_images")" "$services" | sort)
     [[ $app_changes == "$draft_changes" ]] || moved=yes
   elif [[ -n $draft_images ]]; then
-    moved=$(of_services "$(image_changes "$draft_images" "$latest_images")" "$(app_services "$draft_images" "$current")")
+    draft_services=$(app_services "$draft_images" "$current")
+    if [[ -n $draft_services ]]; then
+      moved=$(of_services "$(image_changes "$draft_images" "$latest_images")" "$draft_services")
+    fi
   fi
 
   if [[ -n $current && $current != "$previous" && -z $moved ]]; then
@@ -119,7 +132,7 @@ guess_version() {
     return
   fi
 
-  candidates=$(while read -r _ _ _ _ tag; do shaped_like "$previous" "$tag"; done <<< "$app_changes" | sort -u)
+  candidates=$(while read -r _ _ _ _ tag; do version_from "$previous" "$tag"; done <<< "$app_changes" | sort -u)
   if [[ $(wc -l <<< "$candidates") == 1 ]]; then
     echo "$candidates"
   fi
