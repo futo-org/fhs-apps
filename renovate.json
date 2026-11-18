@@ -9,13 +9,21 @@
   "minimumReleaseAge": null,
   "schedule": ["at any time"],
   "separateMajorMinor": false,
+  "semanticCommits": "disabled",
+  "commitMessageAction": "",
+  "group": {
+    "commitMessageTopic": "{{{replace '/.*' '' packageFile}}} release:",
+    "commitMessageExtra": "{{{currentVersion}}} > {{{newVersion}}}"
+  },
   "prBodyNotes": [
     "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, then run `mise run release <app>` and answer `appVersion` and `canSkip`."
   ],
   "packageRules": [
     {
       "matchManagers": ["docker-compose"],
-      "enabled": false
+      "enabled": false,
+      "commitMessageTopic": "{{{replace '/.*' '' packageFile}}} release:",
+      "commitMessageExtra": "{{{currentVersion}}} > {{{newVersion}}}"
     },
     {
       "matchFileNames": ["homeassistant/latest/docker-compose.yml"],
