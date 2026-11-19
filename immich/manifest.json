@@ -22,6 +22,11 @@
       "version": 4,
       "appVersion": "v3.3.1",
       "canSkip": true
+    },
+    {
+      "version": 5,
+      "appVersion": "v3.4.2",
+      "canSkip": true
     }
   ]
 }
