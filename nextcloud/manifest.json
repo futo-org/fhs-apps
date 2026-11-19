@@ -21,7 +21,7 @@
     {
       "version": 4,
       "appVersion": "v35.0.3",
-      "canSkip": true
+      "canSkip": false
     }
   ]
 }
