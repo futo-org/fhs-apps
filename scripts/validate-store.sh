@@ -399,7 +399,7 @@ validate_history() {
 
   published=$BASE_REF
   if ! git cat-file -e "$BASE_REF:$app/manifest.json" 2> /dev/null; then
-    removal=$(git rev-list -1 "$BASE_REF" -- "$app/manifest.json")
+    removal=$(git rev-list -1 --first-parent "$BASE_REF" -- "$app/manifest.json")
     [[ -z "$removal" ]] || published="$removal^"
   fi
   if base_manifest=$(git show "$published:$app/manifest.json" 2> /dev/null); then

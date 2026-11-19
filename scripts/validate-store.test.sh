@@ -314,6 +314,20 @@ assert_problem "rejects another package under a removed app's ID and release num
   whoami/releases/1 "published release folders never change"
 
 store=$(committed_store)
+trunk=$(git -C "$store" branch --show-current)
+git -C "$store" checkout -qb side
+echo 'exit 0' > "$store/whoami/releases/1/health-check.sh"
+commit "$store" "change whoami"
+git -C "$store" rm -rq whoami
+edit_json "$store/catalog.json" '.apps = []'
+commit "$store" "remove whoami"
+git -C "$store" checkout -q "$trunk"
+git -C "$store" -c user.name=t -c user.email=t@t -c commit.gpgsign=false merge -q --no-ff -m "merge side" side
+git -C "$store" checkout -q side~1 -- whoami catalog.json
+assert_problem "rejects a package changed on the branch that removed its app" "$(problems "$store" HEAD)" \
+  whoami/releases/1 "published release folders never change"
+
+store=$(committed_store)
 edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'
 release "$store"
 assert_equal "accepts a PR that changes latest/ and adds its release" "$(problems "$store" HEAD)" ""
