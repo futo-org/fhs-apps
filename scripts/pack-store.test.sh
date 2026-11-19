@@ -52,6 +52,12 @@ assert_equal "packs each path once when the catalog lists an app twice" \
   "$(tar -tzf "$test_root/twice.tar.gz" | sort | uniq -d)$(entry_attributes "$test_root/twice.tar.gz" | cut -c1 | sort -u)" "-"
 git -C "$store" checkout -q -- catalog.json
 
+chmod 0444 "$store/catalog.json"
+run "$store/scripts/pack-store.sh" "$test_root/read-only.tar.gz" 7
+assert_equal "packs a store whose catalog is read only" \
+  "$status $(tar -xzOf "$test_root/read-only.tar.gz" catalog.json | jq -c .storeVersion)" "0 7"
+chmod 0644 "$store/catalog.json"
+
 openssl enc -aes-128-ctr -nosalt -K 00000000000000000000000000000000 -iv 00000000000000000000000000000000 \
   -in <(head -c 1100000 /dev/zero) -out "$store/whoami/releases/1/data/config/noise"
 run "$store/scripts/pack-store.sh" "$test_root/big.tar.gz" 7

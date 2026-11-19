@@ -43,7 +43,7 @@ jobs:
         run: |
           apps=$(git diff --name-only "$BASE_REF...HEAD" -- '*/latest/**' ':(exclude)_*' | cut -d/ -f1 | sort -u)
           for app in $apps; do
-            [[ -d $app ]] || continue
+            [[ -f $app/manifest.json ]] || continue
             mise run ci-run install "$app"
             mise run ci-run update "$app"
             docker image prune -af > /dev/null

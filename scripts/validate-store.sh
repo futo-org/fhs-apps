@@ -394,17 +394,22 @@ history_problems() {
 }
 
 validate_history() {
-  local app=$1 base_manifest count base_count=0 version
+  local app=$1 published removal base_manifest count base_count=0 version
   [[ -n "${BASE_REF:-}" ]] || return 0
 
-  if base_manifest=$(git show "$BASE_REF:$app/manifest.json" 2> /dev/null); then
+  published=$BASE_REF
+  if ! git cat-file -e "$BASE_REF:$app/manifest.json" 2> /dev/null; then
+    removal=$(git rev-list -1 "$BASE_REF" -- "$app/manifest.json")
+    [[ -z "$removal" ]] || published="$removal^"
+  fi
+  if base_manifest=$(git show "$published:$app/manifest.json" 2> /dev/null); then
     report_problems "$app/manifest.json" history_problems "$base_manifest" "$app/manifest.json"
     base_count=$(jq '.releases | length' <<< "$base_manifest")
   fi
 
   count=$(jq '.releases | length' "$app/manifest.json")
   for ((version = 1; version <= base_count; version++)); do
-    git diff --quiet "$BASE_REF" -- "$app/releases/$version" \
+    git diff --quiet "$published" -- "$app/releases/$version" \
       || fail "$app/releases/$version: published release folders never change"
   done
   if ((count > base_count + 1)); then

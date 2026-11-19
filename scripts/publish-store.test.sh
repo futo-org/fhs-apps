@@ -219,6 +219,7 @@ cp -a "$store/whoami" "$store/echo"
 edit_json "$store/echo/manifest.json" '.appId = "echo"'
 edit_json "$store/catalog.json" '.apps += [{"id": "echo", "name": "Echo"}]'
 commit "$store" "add echo"
+added_echo=$(git -C "$store" rev-parse HEAD)
 trunk=$(git -C "$store" branch --show-current)
 publish "$versions" commit
 assert_equal "counts a new app as the next store version" "$status $(store_version "$versions:nightly")" "0 3"
@@ -255,6 +256,14 @@ commit "$store" "remove echo"
 publish "$versions" commit
 assert_equal "counts removing an app as the next store version" \
   "$status $(store_version "$versions:nightly") $(bundle_catalog "$versions:nightly" | jq -r '[.apps[].id] | join(",")')" "0 7 whoami"
+
+git -C "$store" checkout -q -b behind "$added_echo"
+git -C "$store" -c user.name=t -c user.email=t@t -c commit.gpgsign=false merge -q --no-ff -m "merge $trunk" "$trunk"
+publish "$versions" commit
+assert_equal "moves no channel to a branch that merged the published store off its first parent line, so counts fewer versions" \
+  "$((status > 0)) $(store_version "$versions:nightly")" "1 7"
+assert_problem "names the channel it can't order" "$output" "$versions:nightly" "first parent line"
+git -C "$store" checkout -q "$trunk"
 
 git clone -q --depth 1 "file://$store" "$test_root/shallow"
 run env STORE_REPOSITORIES="$versions" "$test_root/shallow/scripts/publish-store.sh" pr 32

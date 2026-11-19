@@ -81,7 +81,11 @@ channel_plan() {
 
   git merge-base --is-ancestor "$at" "$revision" || ancestry=$?
   case $ancestry in
-    0) echo "move: from $at" ;;
+    0)
+      grep -Fxq "$at" <<< "$(git rev-list --first-parent "$revision")" \
+        || fail "$ref: points at $at, which $revision merged off its first parent line, so its store version may be higher"
+      echo "move: from $at"
+      ;;
     1) echo "stay: at $at, which $revision doesn't descend from" ;;
     *) fail "$ref: couldn't order $at against $revision" ;;
   esac

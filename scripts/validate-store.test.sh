@@ -299,7 +299,19 @@ assert_problem "rejects removing a published release" "$(problems "$store" HEAD)
 store=$(committed_store)
 rm -rf "$store/whoami"
 edit_json "$store/catalog.json" '.apps = []'
-assert_equal "accepts removing a published app" "$(problems "$store" HEAD)" ""
+run env SKIP_RENDER=1 BASE_REF=HEAD "$store/scripts/validate-store.sh"
+assert_equal "accepts removing a published app" "$status" 0
+commit "$store" "remove whoami"
+git -C "$store" checkout -q HEAD~1 -- whoami catalog.json
+run env SKIP_RENDER=1 BASE_REF=HEAD "$store/scripts/validate-store.sh"
+assert_equal "accepts bringing a removed app back with its published releases" "$status" 0
+rm -rf "$store/whoami"
+mkdir "$store/whoami"
+echo '{"schemaVersion": 1, "appId": "whoami", "appPort": 8080, "releases": []}' > "$store/whoami/manifest.json"
+write_release "$store/whoami/latest" v2.0.0
+release "$store"
+assert_problem "rejects another package under a removed app's ID and release number" "$(problems "$store" HEAD)" \
+  whoami/releases/1 "published release folders never change"
 
 store=$(committed_store)
 edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'

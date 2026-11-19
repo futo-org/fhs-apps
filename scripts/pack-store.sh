@@ -29,15 +29,16 @@ apps=$(jq -r '.apps[].id' catalog.json)
 
 files=$(LC_ALL=C sort -u "$work/list")
 mapfile -t paths <<< "$files"
+mapfile -t copied < <(grep -Fvx catalog.json <<< "$files")
 mkdir "$work/store"
-cp --parents --preserve=mode "${paths[@]}" "$work/store"
 jq --argjson storeVersion "$store_version" '.storeVersion = $storeVersion' catalog.json > "$work/store/catalog.json"
-cd "$work/store"
-unpacked=$((512 * ${#paths[@]} + $(du -cb "${paths[@]}" | tail -1 | cut -f1)))
+unpacked=$((512 * ${#paths[@]} + $(du -cb "$work/store/catalog.json" "${copied[@]}" | tail -1 | cut -f1)))
 if ((unpacked > 67108864)); then
   echo "$out: unpacks to $unpacked bytes, over the agent's limit of 67108864 bytes" >&2
   exit 1
 fi
+cp --parents --preserve=mode "${copied[@]}" "$work/store"
+cd "$work/store"
 
 packed=$(mktemp "$out.XXXXXX")
 trap 'rm -rf "$work" "$packed"' EXIT
