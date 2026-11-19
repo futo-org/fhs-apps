@@ -12,6 +12,10 @@ _Avoid_: repo, registry, clone
 The whole store at one publish, as the single artifact a device downloads, tagged with the commit it was made from. On the device its digest is its identity and names its folder.
 _Avoid_: snapshot (a copy of app data), tarball, release (one app's package)
 
+**Store version**:
+A store bundle's order: the number of commits on `master`'s first parent line that changed the store, written into the bundle's catalog at publish. Each new store gets a higher one, even one that drops an app, so a device refuses only an older store.
+_Avoid_: schema version (the format), revision (the commit)
+
 **Catalog**:
 The store's list of apps that can be installed.
 

@@ -138,15 +138,18 @@ scripts/
 * `mise run release [<app-id>]`: freezes `latest/` into the PR's release, asking for the
   app when none is given (`BASE_REF`, default `origin/master`, is the branch the PR merges
   into).
-* `mise run pack <out>`: the store bundle devices download, the same bytes for the same store.
+* `mise run pack <out> <store version>`: the store bundle devices download, the same bytes for
+  the same store and version. Its `catalog.json` carries `storeVersion`; the repo's doesn't.
   Fails over the agent's limits: 1 MiB packed, 64 MiB unpacked.
 * `mise run publish commit`: what CI runs on `master` once `validate` passes. Pushes
   `store:<commit>` to ghcr, signs it, and copies both to `oci.futo.org/futo-home/store`.
   Then it moves `nightly` and `alpha` on each, only forward. Its revision is the last commit on `master`'s
   first parent line that changed the store or how it's packed, so the same store always gets
-  the same digest, and a channel moves only when
-  the commit it points at is an ancestor of that one. `mise run publish pr <number>` pushes a
-  PR's unsigned `store:pr-<number>` to ghcr. `STORE_REPOSITORIES` points it at other
+  the same digest. Its store version counts those commits, so each new store gets a higher one;
+  a shallow clone is refused. A PR's store counts them on GitHub's test merge with `master`, so a
+  store change that reaches `master` first raises the version the PR gets once it merges. A
+  channel moves only when the commit it points at is on that one's first parent line.
+  `mise run publish pr <number>` pushes a PR's unsigned `store:pr-<number>` to ghcr. `STORE_REPOSITORIES` points it at other
   registries, `COSIGN_KEY` signs with a key instead of CI's keyless identity.
 
   In Harbor project `futo-home` (ID 13), create a project robot with Pull Repository and
