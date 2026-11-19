@@ -299,8 +299,7 @@ assert_problem "rejects removing a published release" "$(problems "$store" HEAD)
 store=$(committed_store)
 rm -rf "$store/whoami"
 edit_json "$store/catalog.json" '.apps = []'
-assert_problem "rejects removing a published app" "$(problems "$store" HEAD)" \
-  whoami/manifest.json "a published app can't be removed"
+assert_equal "accepts removing a published app" "$(problems "$store" HEAD)" ""
 
 store=$(committed_store)
 edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'

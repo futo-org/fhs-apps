@@ -412,19 +412,6 @@ validate_history() {
   fi
 }
 
-validate_removed_apps() {
-  local published path
-  [[ -n "${BASE_REF:-}" ]] || return 0
-  published=$(git ls-tree -r --name-only "$BASE_REF") || {
-    fail "$BASE_REF: couldn't list its apps"
-    return
-  }
-  while IFS= read -r path; do
-    [[ "$path" =~ ^[^_./][^/]*/manifest\.json$ ]] || continue
-    [[ -f "$path" ]] || fail "$path: a published app can't be removed"
-  done <<< "$published"
-}
-
 if [[ -n "${BASE_REF:-}" ]] && ! git rev-parse --verify -q "$BASE_REF^{commit}" > /dev/null; then
   echo "warning: BASE_REF $BASE_REF not found, skipping history checks" >&2
   BASE_REF=
@@ -436,7 +423,6 @@ fi
 
 validate_catalog
 validate_links
-validate_removed_apps
 for app in $(app_ids); do
   validate_manifest "$app"
   validate_history "$app"
