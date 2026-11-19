@@ -22,12 +22,15 @@ fail() {
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 commit=$(git rev-parse HEAD)
+[[ $(git rev-parse --is-shallow-repository) == false ]] \
+  || fail "this clone is shallow, so the store version can't be counted (fetch the full history)"
+store_version=$(git rev-list --first-parent --count HEAD -- "${store_paths[@]}")
 revision=$(git rev-list -1 --first-parent HEAD -- "${store_paths[@]}")
 [[ -n "$revision" ]] || fail "no commit changed the store"
 created=$(git show -s --format=%cI "$revision")
 
 pack() {
-  scripts/pack-store.sh "$work/store.tar.gz"
+  scripts/pack-store.sh "$work/store.tar.gz" "$store_version"
 }
 
 push_store() {

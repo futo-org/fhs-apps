@@ -58,6 +58,20 @@ release_whoami() {
   commit "$store" "$1"
 }
 
+bundle_catalog() {
+  local layer
+  layer=$(crane manifest "$1" | jq -r '.layers[0].digest')
+  crane blob "${1%:*}@$layer" | tar -xzO catalog.json
+}
+
+store_version() {
+  bundle_catalog "$1" | jq -c .storeVersion
+}
+
+merge_into_trunk() {
+  git -C "$store" -c user.name=t -c user.email=t@t -c commit.gpgsign=false merge -q --no-ff -m "merge $1" "$1"
+}
+
 push_tag_without_store() {
   echo junk > "$test_root/junk"
   (cd "$test_root" && oras push "$1" "${@:2}" junk > /dev/null)
@@ -82,7 +96,9 @@ assert_equal "pushes store:<commit> with one digest to both registries" "$(diges
 assert_equal "points every channel on both registries at it when they don't exist yet" "$(channel_digests)" \
   "$first_digest $first_digest $first_digest $first_digest"
 assert_equal "signs it on both registries" "$(signatures "$ghcr@$first_digest" "$futo@$first_digest")" "signed signed"
-"$store/scripts/pack-store.sh" "$test_root/first.tar.gz" > /dev/null
+assert_equal "puts the count of commits that changed the store into the bundle's catalog, leaving the repo's catalog without it" \
+  "$(store_version "$ghcr:$first") $(jq -c .storeVersion "$store/catalog.json")" "2 null"
+"$store/scripts/pack-store.sh" "$test_root/first.tar.gz" 2 > /dev/null
 assert_equal "pushes the packed store as the agent's single layer, named for the commit" \
   "$(crane manifest "$futo:nightly" | jq -c '{artifactType, config: .config.mediaType, layers: [.layers[] | {mediaType, digest, title: .annotations["org.opencontainers.image.title"]}], revision: .annotations["org.opencontainers.image.revision"]}')" \
   "{\"artifactType\":\"application/vnd.futo.fhs-apps.store.v1\",\"config\":\"application/vnd.oci.empty.v1+json\",\"layers\":[{\"mediaType\":\"application/vnd.futo.fhs-apps.store.v1.tar+gzip\",\"digest\":\"sha256:$(sha256sum "$test_root/first.tar.gz" | cut -d' ' -f1)\",\"title\":\"store.tar.gz\"}],\"revision\":\"$first\"}"
@@ -93,6 +109,7 @@ publish "$both" commit
 second_digest=$(digest_of "$ghcr:$second")
 assert_equal "moves every channel on both registries to a newer commit's store" "$status $(channel_digests)" \
   "0 $second_digest $second_digest $second_digest $second_digest"
+assert_equal "counts a new release as the next store version" "$(store_version "$futo:nightly")" 3
 
 echo docs >> "$store/README.md"
 commit "$store" docs
@@ -194,5 +211,54 @@ for change in "an edited manifest|whoami/manifest.json" "an edited release file|
   git -C "$store" checkout -q -- whoami
   git -C "$store" clean -qfd -- whoami
 done
+
+versions="${ghcr%/*}/versions"
+store=$(new_store)
+release_whoami v1.10.1
+cp -a "$store/whoami" "$store/echo"
+edit_json "$store/echo/manifest.json" '.appId = "echo"'
+edit_json "$store/catalog.json" '.apps += [{"id": "echo", "name": "Echo"}]'
+commit "$store" "add echo"
+trunk=$(git -C "$store" branch --show-current)
+publish "$versions" commit
+assert_equal "counts a new app as the next store version" "$status $(store_version "$versions:nightly")" "0 3"
+
+git -C "$store" checkout -q -b whoami-release
+release_whoami v1.11.0
+git -C "$store" checkout -q -b echo-release "$trunk"
+edit_json "$store/echo/latest/release.json" '.appVersion = "v2.0.0"'
+release "$store" echo
+commit "$store" "echo v2.0.0"
+git -C "$store" checkout -q "$trunk"
+merge_into_trunk whoami-release
+publish "$versions" commit
+after_whoami=$(store_version "$versions:nightly")
+merge_into_trunk echo-release
+publish "$versions" commit
+assert_equal "gives two releases opened from one commit increasing store versions as they merge in turn" \
+  "$status $after_whoami $(store_version "$versions:nightly")" "0 4 5"
+
+git -C "$store" checkout -q -b whoami-next
+release_whoami v1.12.0
+git -C "$store" checkout -q --detach "$trunk"
+merge_into_trunk whoami-next
+publish "$versions" pr 31
+git -C "$store" checkout -q "$trunk"
+merge_into_trunk whoami-next
+publish "$versions" commit
+assert_equal "gives a PR's store the version master's store gets once the PR merges" \
+  "$status $(store_version "$versions:pr-31") $(store_version "$versions:nightly")" "0 6 6"
+
+rm -r "$store/echo"
+edit_json "$store/catalog.json" '.apps |= map(select(.id != "echo"))'
+commit "$store" "remove echo"
+publish "$versions" commit
+assert_equal "counts removing an app as the next store version" \
+  "$status $(store_version "$versions:nightly") $(bundle_catalog "$versions:nightly" | jq -r '[.apps[].id] | join(",")')" "0 7 whoami"
+
+git clone -q --depth 1 "file://$store" "$test_root/shallow"
+run env STORE_REPOSITORIES="$versions" "$test_root/shallow/scripts/publish-store.sh" pr 32
+assert_equal "refuses to publish from a shallow clone, where the store version can't be counted" \
+  "$status $(digest_of "$versions:pr-32") $([[ "$output" == *shallow* ]] && echo says shallow)" "1 missing says shallow"
 
 finish_tests
