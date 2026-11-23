@@ -6,7 +6,7 @@ name: homeassistant
 
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2026.10.1
+    image: ghcr.io/home-assistant/home-assistant:2026.11.3
     volumes:
       - ${APP_DATA_DIR}/config:/config
       - /etc/localtime:/etc/localtime:ro
