@@ -28,7 +28,14 @@ restarts_after=0
 }
 compose_ps=()
 compose_ps_status=0
+pull_failures=0
+pulls=0
 docker() {
+  if [[ "$*" == "compose pull --quiet" ]]; then
+    pulls=$((pulls + 1))
+    ((pulls > pull_failures))
+    return
+  fi
   if [[ "$*" == "compose ps -a --format json" ]]; then
     printf '%s\n' "${compose_ps[@]}"
     return "$compose_ps_status"
@@ -118,7 +125,7 @@ start() {
   echo '{}' > "$dir/release.json"
   echo 'echo ran > checked' > "$dir/health-check.sh"
   compose_ps=("$@")
-  now=0 status=0
+  now=0 status=0 pulls=0
   output=$(with_device_env start_release "$dir" 2>&1) || status=$?
   output=$(tail -1 <<< "$output")
   checked=$([[ -f "$dir/checked" ]] && echo checked || echo unchecked)
@@ -139,6 +146,23 @@ assert_equal "fails before the health gate when the containers can't be listed" 
 
 start 'not json'
 assert_equal "fails before the health gate when the container list isn't json" "$status $checked" "1 unchecked"
+
+pull_failures=3
+start '{"Service":"server","LocalVolumes":"0"}'
+pull_failures=0
+assert_equal "fails before the health gate when the images can't be pulled" "$status $checked" "1 unchecked"
+
+pull() {
+  pull_failures=$1 pulls=0 sleeps=() status=0
+  pull_images > /dev/null 2>&1 || status=$?
+  pull_failures=0
+}
+
+pull 2
+assert_equal "retries a failed pull, waiting longer each time" "$status $pulls ${sleeps[*]}" "0 3 15 30"
+
+pull 3
+assert_equal "gives up after 3 failed pulls" "$status $pulls ${sleeps[*]}" "1 3 15 30"
 
 seed=$(mktemp -d "$test_root/seed.XXXXXX")
 mkdir -p "$seed/release/data/postgres" "$seed/release/data/config"
