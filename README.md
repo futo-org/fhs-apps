@@ -142,7 +142,7 @@ scripts/
   Fails over the agent's limits: 1 MiB packed, 64 MiB unpacked.
 * `mise run publish commit`: what CI runs on `master` once `validate` passes. Pushes
   `store:<commit>` to ghcr, signs it, and copies both to `oci.futo.org/futo-home/store`.
-  Then it moves `nightly` and `alpha` on each, only forward. Its revision is the last commit on `master`'s
+  Then it moves `nightly`, `alpha`, `beta` and `stable` on each, only forward. Its revision is the last commit on `master`'s
   first parent line that changed the store or how it's packed, so the same store always gets
   the same digest, and a channel moves only when
   the commit it points at is an ancestor of that one. `mise run publish pr <number>` pushes a
