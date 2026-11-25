@@ -394,35 +394,27 @@ history_problems() {
 }
 
 validate_history() {
-  local app=$1 base_manifest count base_count=0 version
+  local app=$1 published removal base_manifest count base_count=0 version
   [[ -n "${BASE_REF:-}" ]] || return 0
 
-  if base_manifest=$(git show "$BASE_REF:$app/manifest.json" 2> /dev/null); then
+  published=$BASE_REF
+  if ! git cat-file -e "$BASE_REF:$app/manifest.json" 2> /dev/null; then
+    removal=$(git rev-list -1 --first-parent "$BASE_REF" -- "$app/manifest.json")
+    [[ -z "$removal" ]] || published="$removal^"
+  fi
+  if base_manifest=$(git show "$published:$app/manifest.json" 2> /dev/null); then
     report_problems "$app/manifest.json" history_problems "$base_manifest" "$app/manifest.json"
     base_count=$(jq '.releases | length' <<< "$base_manifest")
   fi
 
   count=$(jq '.releases | length' "$app/manifest.json")
   for ((version = 1; version <= base_count; version++)); do
-    git diff --quiet "$BASE_REF" -- "$app/releases/$version" \
+    git diff --quiet "$published" -- "$app/releases/$version" \
       || fail "$app/releases/$version: published release folders never change"
   done
   if ((count > base_count + 1)); then
     fail "$app/manifest.json: a PR adds one release at most, this one adds $((count - base_count))"
   fi
-}
-
-validate_removed_apps() {
-  local published path
-  [[ -n "${BASE_REF:-}" ]] || return 0
-  published=$(git ls-tree -r --name-only "$BASE_REF") || {
-    fail "$BASE_REF: couldn't list its apps"
-    return
-  }
-  while IFS= read -r path; do
-    [[ "$path" =~ ^[^_./][^/]*/manifest\.json$ ]] || continue
-    [[ -f "$path" ]] || fail "$path: a published app can't be removed"
-  done <<< "$published"
 }
 
 if [[ -n "${BASE_REF:-}" ]] && ! git rev-parse --verify -q "$BASE_REF^{commit}" > /dev/null; then
@@ -436,7 +428,6 @@ fi
 
 validate_catalog
 validate_links
-validate_removed_apps
 for app in $(app_ids); do
   validate_manifest "$app"
   validate_history "$app"

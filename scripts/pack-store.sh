@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (($# != 1)); then
-  echo "usage: $0 <out>" >&2
+if (($# != 2)) || [[ ! "$2" =~ ^(0|[1-9][0-9]*)$ ]]; then
+  echo "usage: $0 <out> <store version>" >&2
   exit 2
 fi
 
 out=$(realpath -m "$1")
+store_version=$2
 cd "$(dirname "$0")/.."
 
 tar --version | grep -q 'GNU tar' || {
@@ -28,11 +29,16 @@ apps=$(jq -r '.apps[].id' catalog.json)
 
 files=$(LC_ALL=C sort -u "$work/list")
 mapfile -t paths <<< "$files"
-unpacked=$((512 * ${#paths[@]} + $(du -cb "${paths[@]}" | tail -1 | cut -f1)))
+mapfile -t copied < <(grep -Fvx catalog.json <<< "$files")
+mkdir "$work/store"
+jq --argjson storeVersion "$store_version" '.storeVersion = $storeVersion' catalog.json > "$work/store/catalog.json"
+unpacked=$((512 * ${#paths[@]} + $(du -cb "$work/store/catalog.json" "${copied[@]}" | tail -1 | cut -f1)))
 if ((unpacked > 67108864)); then
   echo "$out: unpacks to $unpacked bytes, over the agent's limit of 67108864 bytes" >&2
   exit 1
 fi
+cp --parents --preserve=mode "${copied[@]}" "$work/store"
+cd "$work/store"
 
 packed=$(mktemp "$out.XXXXXX")
 trap 'rm -rf "$work" "$packed"' EXIT

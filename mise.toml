@@ -30,7 +30,7 @@ description = "Run an app like a device, pulls images: install|update <app-id>"
 run = "bash scripts/ci-run.sh"
 
 [tasks.pack]
-description = "Pack the store into the bundle devices download: <out>"
+description = "Pack the store into the bundle devices download: <out> <store version>"
 run = "bash scripts/pack-store.sh"
 
 [tasks.publish]

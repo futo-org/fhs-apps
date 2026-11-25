@@ -13,7 +13,7 @@ release "$store"
 cp "$scripts_dir/pack-store.test.sh" "$store/scripts/"
 commit "$store" "release 1"
 
-run "$store/scripts/pack-store.sh" "$test_root/first.tar.gz"
+run "$store/scripts/pack-store.sh" "$test_root/first.tar.gz" 7
 assert_equal "packs the store" "$status" 0
 assert_equal "packs the catalog, each manifest and release and the renderer, by path from the store root" \
   "$(tar -tzf "$test_root/first.tar.gz")" \
@@ -29,23 +29,38 @@ assert_equal "packs regular files owned by root at a fixed time" "$(entry_attrib
   "-rw-r--r-- 0/0 1970-01-01 00:00
 -rwxr-xr-x 0/0 1970-01-01 00:00"
 
+assert_equal "puts the store version into the packed catalog as a number, leaving the repo's catalog as it is" \
+  "$(tar -xzOf "$test_root/first.tar.gz" catalog.json | jq -c .storeVersion) $(jq -c .storeVersion "$store/catalog.json")" "7 null"
+
+for version in -1 1.5 true seven; do
+  run "$store/scripts/pack-store.sh" "$test_root/unversioned.tar.gz" "$version"
+  assert_equal "refuses a store version \"$version\" that isn't a whole number" \
+    "$status $([[ -e "$test_root/unversioned.tar.gz" ]] || echo absent)" "2 absent"
+done
+
 copy=$(mktemp -d "$test_root/copy.XXXXXX")
 cp -r "$store/." "$copy"
 find "$copy" -exec touch -d 2001-02-03T04:05:06 {} +
 chmod -R g+w "$copy"
-"$copy/scripts/pack-store.sh" "$test_root/copy.tar.gz" > /dev/null
+"$copy/scripts/pack-store.sh" "$test_root/copy.tar.gz" 7 > /dev/null
 assert_equal "packs the same store into the same bytes, whatever the file times and group bits" \
   "$(cmp "$test_root/first.tar.gz" "$test_root/copy.tar.gz" && echo same)" same
 
 edit_json "$store/catalog.json" '.apps += .apps'
-"$store/scripts/pack-store.sh" "$test_root/twice.tar.gz" > /dev/null
+"$store/scripts/pack-store.sh" "$test_root/twice.tar.gz" 7 > /dev/null
 assert_equal "packs each path once when the catalog lists an app twice" \
   "$(tar -tzf "$test_root/twice.tar.gz" | sort | uniq -d)$(entry_attributes "$test_root/twice.tar.gz" | cut -c1 | sort -u)" "-"
 git -C "$store" checkout -q -- catalog.json
 
+chmod 0444 "$store/catalog.json"
+run "$store/scripts/pack-store.sh" "$test_root/read-only.tar.gz" 7
+assert_equal "packs a store whose catalog is read only" \
+  "$status $(tar -xzOf "$test_root/read-only.tar.gz" catalog.json | jq -c .storeVersion)" "0 7"
+chmod 0644 "$store/catalog.json"
+
 openssl enc -aes-128-ctr -nosalt -K 00000000000000000000000000000000 -iv 00000000000000000000000000000000 \
   -in <(head -c 1100000 /dev/zero) -out "$store/whoami/releases/1/data/config/noise"
-run "$store/scripts/pack-store.sh" "$test_root/big.tar.gz"
+run "$store/scripts/pack-store.sh" "$test_root/big.tar.gz" 7
 assert_equal "refuses a store over the agent's download limit, naming both sizes" \
   "$status $(sed -E 's/ [0-9]{7} bytes,/ N bytes,/' <<< "$output")" \
   "1 $test_root/big.tar.gz: N bytes, over the agent's limit of 1048576 bytes"
@@ -57,14 +72,14 @@ for broken in "catalog.json|{" "whoami/releases|"; do
   rm -rf "${store:?}/$path"
   [[ -z "$content" ]] || printf '%s' "$content" > "$store/$path"
   rm -f "$test_root/broken.tar.gz"
-  run "$store/scripts/pack-store.sh" "$test_root/broken.tar.gz"
+  run "$store/scripts/pack-store.sh" "$test_root/broken.tar.gz" 7
   assert_equal "fails and leaves no store behind when $path can't be read" \
     "$((status > 0)) $([[ -e "$test_root/broken.tar.gz" ]] || echo absent)" "1 absent"
   git -C "$store" checkout -q -- "$path"
 done
 
 truncate -s 64M "$store/whoami/releases/1/data/config/zeros"
-run "$store/scripts/pack-store.sh" "$test_root/huge.tar.gz"
+run "$store/scripts/pack-store.sh" "$test_root/huge.tar.gz" 7
 assert_equal "refuses a store that unpacks past the agent's limit, naming both sizes" \
   "$status $(sed -E 's/ [0-9]{8} bytes,/ N bytes,/' <<< "$output")" \
   "1 $test_root/huge.tar.gz: unpacks to N bytes, over the agent's limit of 67108864 bytes"
