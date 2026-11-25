@@ -44,9 +44,15 @@ channel_digests() {
 }
 
 every_channel_at() {
-  local i
-  for ((i = 0; i < 2 * ${#channels[@]}; i++)); do
-    echo "$1"
+  local digest=$1 override_ref=${2:-} override_digest=${3:-} repository channel
+  for repository in "$ghcr" "$futo"; do
+    for channel in "${channels[@]}"; do
+      if [[ "$repository:$channel" == "$override_ref" ]]; then
+        echo "$override_digest"
+      else
+        echo "$digest"
+      fi
+    done
   done | paste -sd' '
 }
 
@@ -138,7 +144,7 @@ for case in "an unknown commit|--annotation=org.opencontainers.image.revision=$u
   stray=$(digest_of "$futo:alpha")
   publish "$both" commit
   assert_equal "fails and moves no channel when a channel points at $label" \
-    "$((status > 0)) $(channel_digests)" "1 $third_digest $third_digest $third_digest $third_digest $third_digest $stray $third_digest $third_digest"
+    "$((status > 0)) $(channel_digests)" "1 $(every_channel_at "$third_digest" "$futo:alpha" "$stray")"
   assert_problem "names the channel that points at $label" "$output" "$futo:alpha" "$problem"
 done
 oras tag "$futo@$third_digest" alpha > /dev/null
