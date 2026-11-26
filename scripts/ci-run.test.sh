@@ -30,10 +30,15 @@ compose_ps=()
 compose_ps_status=0
 pull_failures=0
 pulls=0
+up_marker=/dev/null
 docker() {
   if [[ "$*" == "compose pull --quiet" ]]; then
     pulls=$((pulls + 1))
     ((pulls > pull_failures))
+    return
+  fi
+  if [[ "$*" == "compose up -d" ]]; then
+    touch "$up_marker"
     return
   fi
   if [[ "$*" == "compose ps -a --format json" ]]; then
@@ -125,11 +130,12 @@ start() {
   echo '{}' > "$dir/release.json"
   echo 'echo ran > checked' > "$dir/health-check.sh"
   compose_ps=("$@")
-  now=0 status=0 pulls=0
+  now=0 status=0 pulls=0 up_marker=$dir/up
   output=$(with_device_env start_release "$dir" 2>&1) || status=$?
   output=$(tail -1 <<< "$output")
   checked=$([[ -f "$dir/checked" ]] && echo checked || echo unchecked)
-  compose_ps=()
+  started=$([[ -f "$dir/up" ]] && echo started || echo unstarted)
+  compose_ps=() up_marker=/dev/null
 }
 
 start '{"Service":"server","LocalVolumes":"0"}' '{"Service":"redis","LocalVolumes":"1"}'
@@ -137,7 +143,7 @@ assert_equal "fails before the health gate when a container has an anonymous vol
   "$status $checked | $output" "1 unchecked | redis: anonymous volume, bind every VOLUME of its image under \${APP_DATA_DIR}"
 
 start '{"Service":"server","LocalVolumes":"0"}' '{"Service":"redis","LocalVolumes":"0"}'
-assert_equal "starts when every container binds its volumes" "$status $checked | $output" "0 checked | healthy after 0 s"
+assert_equal "starts when every container binds its volumes" "$status $started $checked | $output" "0 started checked | healthy after 0 s"
 
 compose_ps_status=1
 start
@@ -150,13 +156,16 @@ assert_equal "fails before the health gate when the container list isn't json" "
 pull_failures=3
 start '{"Service":"server","LocalVolumes":"0"}'
 pull_failures=0
-assert_equal "fails before the health gate when the images can't be pulled" "$status $checked" "1 unchecked"
+assert_equal "fails before starting the containers when the images can't be pulled" "$status $started $checked" "1 unstarted unchecked"
 
 pull() {
   pull_failures=$1 pulls=0 sleeps=() status=0
   pull_images > /dev/null 2>&1 || status=$?
   pull_failures=0
 }
+
+pull 1
+assert_equal "stops pulling once a retry succeeds" "$status $pulls ${sleeps[*]}" "0 2 15"
 
 pull 2
 assert_equal "retries a failed pull, waiting longer each time" "$status $pulls ${sleeps[*]}" "0 3 15 30"
