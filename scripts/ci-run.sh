@@ -24,10 +24,20 @@ seed_data() {
   find "$APP_DATA_DIR" -type f -name .gitkeep -delete
 }
 
+pull_images() {
+  local attempt
+  for attempt in 1 2; do
+    docker compose pull --quiet && return 0
+    echo "== pull failed, retry in $((attempt * 15)) s"
+    sleep $((attempt * 15))
+  done
+  docker compose pull --quiet
+}
+
 start_release() {
   local dir=$1
   echo "== pull"
-  docker compose pull --quiet
+  pull_images || return 1
   echo "== up"
   docker compose up -d
   require_no_anonymous_volumes || return 1

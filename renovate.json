@@ -17,7 +17,8 @@
     "commitMessageSuffix": "{{#if (lookup (distinct (lookupArray upgrades 'currentVersion')) 1)}}mixed image versions{{else if (lookup (distinct (lookupArray upgrades 'newVersion')) 1)}}mixed image versions{{else}}{{{currentVersion}}} > {{{newVersion}}}{{/if}}"
   },
   "prBodyNotes": [
-    "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, then run `mise run release <app>` and answer `appVersion` and `canSkip`."
+    "Red until released. Before merging, follow the [update review checklist](https://github.com/futo-org/fhs-apps/blob/master/.github/pull_request_template.md): read the release notes, then tick one box below to release with the guessed `appVersion`, or run `mise run release <app>` and push.",
+    "<!-- release -->\n- [ ] Release, can skip\n- [ ] Release, required stop\n<!-- /release -->"
   ],
   "packageRules": [
     {
