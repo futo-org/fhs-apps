@@ -4,10 +4,6 @@ set -euo pipefail
 # shellcheck source=testing.sh
 source "$(dirname "$0")/testing.sh"
 
-release() {
-  BASE_REF=HEAD "$1/scripts/release.sh" whoami > /dev/null
-}
-
 released_store() {
   local store
   store=$(new_store)
@@ -334,11 +330,11 @@ cp -a "$store/whoami" "$store/second"
 rm -rf "$store/second/releases"
 edit_json "$store/second/manifest.json" '.appId = "second" | .releases = []'
 edit_json "$store/catalog.json" '.apps += [{id: "second", name: "Second"}]'
-BASE_REF=HEAD "$store/scripts/release.sh" second > /dev/null
+release "$store" second
 base=$(git -C "$store" rev-parse HEAD)
 commit "$store" "second release 1"
 edit_json "$store/second/latest/release.json" '.appVersion = "v2.0.0"'
-BASE_REF=HEAD "$store/scripts/release.sh" second > /dev/null
+release "$store" second
 assert_problem "rejects a new app's first PR that adds two releases" "$(problems "$store" "$base")" \
   second/manifest.json "a PR adds one release at most, this one adds 2"
 
@@ -350,7 +346,7 @@ git -C "$store" checkout -q HEAD~1 -- scripts
 release "$store"
 commit "$store" "release 1"
 edit_json "$store/whoami/latest/release.json" '.appVersion = "v1.11.0"'
-BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+release "$store"
 assert_equal "keeps no history against a base from before the store format" "$(problems "$store" "$base")" ""
 
 store=$(released_store)

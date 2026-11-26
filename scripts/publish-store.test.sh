@@ -32,11 +32,26 @@ digest_of() {
   crane digest "$1" 2> /dev/null || echo missing
 }
 
+channels=(nightly alpha beta stable)
+
 channel_digests() {
   local repository channel
   for repository in "$ghcr" "$futo"; do
-    for channel in nightly alpha; do
+    for channel in "${channels[@]}"; do
       digest_of "$repository:$channel"
+    done
+  done | paste -sd' '
+}
+
+every_channel_at() {
+  local digest=$1 override_ref=${2:-} override_digest=${3:-} repository channel
+  for repository in "$ghcr" "$futo"; do
+    for channel in "${channels[@]}"; do
+      if [[ "$repository:$channel" == "$override_ref" ]]; then
+        echo "$override_digest"
+      else
+        echo "$digest"
+      fi
     done
   done | paste -sd' '
 }
@@ -54,7 +69,7 @@ signatures() {
 
 release_whoami() {
   write_release "$store/whoami/latest" "$1" true
-  BASE_REF=HEAD "$store/scripts/release.sh" whoami > /dev/null
+  release "$store"
   commit "$store" "$1"
 }
 
@@ -80,7 +95,7 @@ first_digest=$(digest_of "$ghcr:$first")
 assert_equal "publishes the first store" "$status" 0
 assert_equal "pushes store:<commit> with one digest to both registries" "$(digest_of "$futo:$first")" "$first_digest"
 assert_equal "points every channel on both registries at it when they don't exist yet" "$(channel_digests)" \
-  "$first_digest $first_digest $first_digest $first_digest"
+  "$(every_channel_at "$first_digest")"
 assert_equal "signs it on both registries" "$(signatures "$ghcr@$first_digest" "$futo@$first_digest")" "signed signed"
 "$store/scripts/pack-store.sh" "$test_root/first.tar.gz" > /dev/null
 assert_equal "pushes the packed store as the agent's single layer, named for the commit" \
@@ -92,7 +107,7 @@ second=$(git -C "$store" rev-parse HEAD)
 publish "$both" commit
 second_digest=$(digest_of "$ghcr:$second")
 assert_equal "moves every channel on both registries to a newer commit's store" "$status $(channel_digests)" \
-  "0 $second_digest $second_digest $second_digest $second_digest"
+  "0 $(every_channel_at "$second_digest")"
 
 echo docs >> "$store/README.md"
 commit "$store" docs
@@ -100,26 +115,26 @@ docs=$(git -C "$store" rev-parse HEAD)
 publish "$both" commit
 assert_equal "gives a newer commit that kept the store the same digest, so the channels stay" \
   "$status $(digest_of "$ghcr:$docs") $(channel_digests)" \
-  "0 $second_digest $second_digest $second_digest $second_digest $second_digest"
+  "0 $second_digest $(every_channel_at "$second_digest")"
 
 git -C "$store" checkout -q "$first"
 publish "$both" commit
 assert_equal "leaves the channels when an older commit runs again" "$status $(channel_digests)" \
-  "0 $second_digest $second_digest $second_digest $second_digest"
+  "0 $(every_channel_at "$second_digest")"
 git -C "$store" checkout -q -
 
 release_whoami v1.11.1
 third=$(git -C "$store" rev-parse HEAD)
 publish "$ghcr localhost:1/fhs-apps/store" commit
 assert_equal "moves no channel when the second registry can't be reached" "$((status > 0)) $(channel_digests)" \
-  "1 $second_digest $second_digest $second_digest $second_digest"
+  "1 $(every_channel_at "$second_digest")"
 
 publish "$ghcr" commit
 third_digest=$(digest_of "$ghcr:$third")
 publish "$both" commit
 assert_equal "brings the second registry level with the first when a run stopped between them" \
   "$status $(digest_of "$ghcr:$third") $(channel_digests) $(signatures "$futo@$third_digest")" \
-  "0 $third_digest $third_digest $third_digest $third_digest $third_digest signed"
+  "0 $third_digest $(every_channel_at "$third_digest") signed"
 
 release_whoami v1.12.0
 unknown_commit=0123456789abcdef0123456789abcdef01234567
@@ -129,7 +144,7 @@ for case in "an unknown commit|--annotation=org.opencontainers.image.revision=$u
   stray=$(digest_of "$futo:alpha")
   publish "$both" commit
   assert_equal "fails and moves no channel when a channel points at $label" \
-    "$((status > 0)) $(channel_digests)" "1 $third_digest $third_digest $third_digest $stray"
+    "$((status > 0)) $(channel_digests)" "1 $(every_channel_at "$third_digest" "$futo:alpha" "$stray")"
   assert_problem "names the channel that points at $label" "$output" "$futo:alpha" "$problem"
 done
 oras tag "$futo@$third_digest" alpha > /dev/null
@@ -141,7 +156,7 @@ pr_digest=$(digest_of "$ghcr:pr-12")
 assert_equal "pushes a PR's store to the first registry only, unsigned, named for its commit" \
   "$status $(crane manifest "$ghcr:pr-12" | jq -r '.annotations["org.opencontainers.image.revision"]') $(digest_of "$futo:pr-12") $(signatures "$ghcr@$pr_digest")" \
   "0 $head missing unsigned"
-assert_equal "moves no channel for a PR" "$(channel_digests)" "$third_digest $third_digest $third_digest $third_digest"
+assert_equal "moves no channel for a PR" "$(channel_digests)" "$(every_channel_at "$third_digest")"
 
 publish "$both" pr twelve
 assert_equal "refuses a PR number that isn't one" "$status" 2
@@ -154,7 +169,7 @@ more_docs=$(git -C "$store" rev-parse HEAD)
 publish "$both" commit
 assert_equal "brings both registries to one digest when a commit that kept the store follows a run that stopped between them" \
   "$status $(digest_of "$futo:$more_docs") $(channel_digests)" \
-  "0 $cut_off_digest $cut_off_digest $cut_off_digest $cut_off_digest $cut_off_digest"
+  "0 $cut_off_digest $(every_channel_at "$cut_off_digest")"
 
 echo '{}' > "$store/_template/manifest.json"
 commit "$store" "template"
@@ -170,7 +185,7 @@ publish "$both" commit
 repacked_digest=$(digest_of "$ghcr:$repacked")
 assert_equal "moves the channels when a commit changes how the store is packed" \
   "$status $([[ "$repacked_digest" != "$cut_off_digest" ]] && echo new) $(channel_digests)" \
-  "0 new $repacked_digest $repacked_digest $repacked_digest $repacked_digest"
+  "0 new $(every_channel_at "$repacked_digest")"
 
 git -C "$store" checkout -q -b side HEAD~1
 git -C "$store" -c user.name=t -c user.email=t@t cherry-pick "$repacked" > /dev/null
@@ -183,14 +198,14 @@ publish "$both" commit
 merged_digest=$(digest_of "$ghcr:$merged")
 assert_equal "moves the channels to a store merged from a branch that started before the published commit" \
   "$status $(crane manifest "$ghcr:$merged" | jq -r '.annotations["org.opencontainers.image.revision"]') $(channel_digests)" \
-  "0 $merged $merged_digest $merged_digest $merged_digest $merged_digest"
+  "0 $merged $(every_channel_at "$merged_digest")"
 
 for change in "an edited manifest|whoami/manifest.json" "an edited release file|whoami/releases/1/health-check.sh" "a new release file|whoami/releases/1/stray"; do
   IFS='|' read -r label path <<< "$change"
   echo changed >> "$store/$path"
   publish "$both" commit
   assert_equal "refuses to publish a store with $label" "$status $(channel_digests)" \
-    "1 $merged_digest $merged_digest $merged_digest $merged_digest"
+    "1 $(every_channel_at "$merged_digest")"
   git -C "$store" checkout -q -- whoami
   git -C "$store" clean -qfd -- whoami
 done
