@@ -40,7 +40,3 @@ Each check is a finding only when it shows a defect, with the upstream source it
 ## Suggested fixes
 
 A suggested compose, env or setting change must hold for every release on the update path, not only the previous one. Check it against the oldest release a device can update from; an env var that skips a migration an older release still needs breaks that device.
-
-## Rereviews
-
-On every new head, recheck each open finding: resolve it when fixed, withdraw it when its premise is gone (Renovate moved the version, the release was added), keep it only when still valid against the current head. Recompute the can skip verdict and the required stops.
