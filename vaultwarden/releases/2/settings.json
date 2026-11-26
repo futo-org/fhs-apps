@@ -1,0 +1,16 @@
+{
+  "fields": [
+    {
+      "key": "SIGNUPS_ALLOWED",
+      "type": "bool",
+      "label": "Allow new accounts",
+      "help": "Anyone who can reach Vaultwarden can create an account. Turn off once everyone has one.",
+      "default": true,
+      "compose": {
+        "false": {
+          "services": { "vaultwarden": { "environment": { "SIGNUPS_ALLOWED": "false" } } }
+        }
+      }
+    }
+  ]
+}
