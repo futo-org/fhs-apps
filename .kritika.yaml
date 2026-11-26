@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://kritika.home-operations.com/kritika.schema.json
+
+context:
+  - path: CONTEXT.md
+    description: Store vocabulary, releases, required stops, update path, snapshot and rollback
+  - path: README.md
+    description: App layout, how releases are made, settings and compose rules
+  - path: .github/pull_request_template.md
+    description: The author's app update checklist and the release boxes
+
+rules:
+  - id: app-update-review
+    file: docs/review/app-update.md
+    paths:
+      - '[a-z0-9]*/latest/**'
+      - '[a-z0-9]*/releases/**'
+      - '[a-z0-9]*/manifest.json'

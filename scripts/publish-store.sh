@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 revision_key=org.opencontainers.image.revision
-channels=(nightly alpha)
+channels=(nightly alpha beta stable)
 store_paths=(catalog.json scripts/generate-compose.sh scripts/pack-store.sh scripts/publish-store.sh '*/manifest.json' '*/releases/*' ':(exclude)_*')
 read -r -a repositories <<< "${STORE_REPOSITORIES:-ghcr.io/futo-org/fhs-apps/store oci.futo.org/futo-home/store}"
 first=${repositories[0]}
