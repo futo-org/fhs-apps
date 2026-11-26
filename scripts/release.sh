@@ -329,9 +329,16 @@ if is_unchanged && [[ -z ${APP_VERSION:-}${CAN_SKIP:-} ]]; then
   release_nothing
 fi
 
-if ((kept == last)) && [[ -e "$app/releases/$next" ]]; then
-  echo "$app/releases/$next: already exists" >&2
-  exit 1
+if ((kept == last)) && [[ -e "$app/releases/$next" || -L "$app/releases/$next" ]]; then
+  if ! leftover=$(find "$app/releases/$next" ! -type d -print -quit 2> /dev/null); then
+    echo "$app/releases/$next: can't be read" >&2
+    exit 1
+  fi
+
+  if [[ -n $leftover ]]; then
+    echo "$app/releases/$next: already exists" >&2
+    exit 1
+  fi
 fi
 
 ask_release
