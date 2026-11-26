@@ -9,8 +9,31 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Find what changed
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.diff.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        name: Check whether the PR changes only docs
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          if git diff --quiet "$BASE_REF...HEAD" -- . ':(exclude)docs' ':(exclude)README.md' ':(exclude)CONTEXT.md' \
+            ':(exclude).kritika.yaml' ':(exclude).github/pull_request_template.md'; then
+            echo "docs-only=true" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint scripts
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -21,6 +44,8 @@ jobs:
 
   test:
     name: Test tooling
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -32,6 +57,8 @@ jobs:
 
   store:
     name: Validate store
+    needs: changes
+    if: needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -47,16 +74,16 @@ jobs:
 
   validate:
     if: always()
-    needs: [lint, test, store]
+    needs: [changes, lint, test, store]
     runs-on: ubuntu-latest
     steps:
-      - name: Fail unless lint, test and store passed
+      - name: Fail unless every check passed or was skipped
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
 
   run-apps:
-    if: github.event_name == 'pull_request'
-    needs: validate
+    if: github.event_name == 'pull_request' && needs.changes.outputs.docs-only != 'true'
+    needs: [changes, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -90,8 +117,11 @@ jobs:
       OCI_FUTO_ORG_TOKEN: ${{ secrets.OCI_FUTO_ORG_TOKEN }}
 
   test-store:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: validate
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.changes.outputs.docs-only != 'true'
+    needs: [changes, validate]
     permissions:
       contents: read
       packages: write
