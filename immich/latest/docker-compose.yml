@@ -41,6 +41,7 @@ services:
       - ${APP_DATA_DIR}/model-cache:/cache
     environment:
       <<: *env
+      MACHINE_LEARNING_MODEL_REVISION: v2
     restart: always
     healthcheck:
       disable: false
